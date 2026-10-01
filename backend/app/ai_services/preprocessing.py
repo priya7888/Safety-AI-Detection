@@ -180,30 +180,100 @@ SAFETY_SPELLING_MAP = {
     "cylender": "cylinder",
 }
 
+# ---------------------------------------------------------------------------
+# Safety-Guarded Neural Transformer Spelling Engine
+# ---------------------------------------------------------------------------
+CRITICAL_SAFETY_PHRASES = [
+    r'\bwithout\s+(?:wearing\s+|a\s+|an\s+)?(?:harness|safety\s*belt|fall\s*protection)\b',
+    r'\bwithout\s+(?:a\s+|an\s+|valid\s+)?(?:permit|ptw|work\s*permit)\b',
+    r'\bno\s+(?:permit|ptw|work\s*permit|clearance)\b',
+    r'\bwithout\s+(?:proper\s+|energy\s+)?(?:isolation|loto|lockout|tagout)\b',
+    r'\bnot\s+(?:locked\s*out|tagged\s*out|isolated|de-energized)\b',
+    r'\bno\s+(?:gas\s*test|gas\s*testing|atmospheric\s*test)\b',
+    r'\bguard\s+(?:was\s+)?(?:missing|removed|absent)\b',
+    r'\bno\s+ppe\b',
+    r'\bnot\s+wearing\b'
+]
 
-def normalize_safety_spelling(text: str) -> str:
+_neural_spelling_model = None
+
+def get_neural_spelling_model():
+    """Lazily loads the lightweight HuggingFace Seq2Seq Transformer for spelling correction."""
+    global _neural_spelling_model
+    if _neural_spelling_model is None:
+        try:
+            from transformers import pipeline
+            _neural_spelling_model = pipeline(
+                "text2text-generation",
+                model="oliverguhr/spelling-correction-english-base",
+                device=-1
+            )
+        except Exception:
+            _neural_spelling_model = False
+    return _neural_spelling_model if _neural_spelling_model is not False else None
+
+
+def _shield_safety_negations(text: str):
+    """Locks critical safety phrases with temporary immutable tokens to prevent hallucinations."""
+    shield_map = {}
+    shielded_text = text
+    counter = 0
+    for pattern in CRITICAL_SAFETY_PHRASES:
+        matches = list(re.finditer(pattern, shielded_text, flags=re.IGNORECASE))
+        for match in matches:
+            matched_str = match.group(0)
+            token = f"__SAFETY_SHIELD_{counter}__"
+            shield_map[token] = matched_str
+            shielded_text = shielded_text.replace(matched_str, token, 1)
+            counter += 1
+    return shielded_text, shield_map
+
+
+def _unshield_safety_negations(text: str, shield_map: dict) -> str:
+    """Restores the locked safety phrases back into the corrected text."""
+    restored_text = text
+    for token, original_phrase in shield_map.items():
+        restored_text = restored_text.replace(token, original_phrase)
+    return restored_text
+
+
+def normalize_safety_spelling(text: str, use_neural: bool = True) -> str:
     """
-    Normalizes high-confidence spelling mistakes and phonetic variants
-    in frontline safety reports (e.g. 'explouser' -> 'exposure') without altering standard text.
+    Safety-Guarded Hybrid Spelling Normalization Engine.
+    Combines high-confidence fast dictionary mapping with Deep Neural Transformer
+    (Seq2Seq Attention) wrapped in an Invariant Safety Shield to prevent safety-flipping hallucinations.
     """
     if not text:
         return ""
 
+    # Phase 1: High-confidence fast domain dictionary lookup
     tokens = text.split()
     corrected_tokens = []
     for tok in tokens:
-        # Strip trailing punctuation for dictionary check
         clean_tok = re.sub(r'^[^\w]+|[^\w]+$', '', tok).lower()
         if clean_tok in SAFETY_SPELLING_MAP:
             replacement = SAFETY_SPELLING_MAP[clean_tok]
-            # preserve original punctuation
             prefix = tok[:len(tok) - len(tok.lstrip('.,!?;:"\'()[]{}'))]
             suffix = tok[len(tok.rstrip('.,!?;:"\'()[]{}')):]
             corrected_tokens.append(f"{prefix}{replacement}{suffix}")
         else:
             corrected_tokens.append(tok)
 
-    return " ".join(corrected_tokens)
+    pre_normalized = " ".join(corrected_tokens)
+
+    # Phase 2: Neural Transformer Seq2Seq Layer (Context-Aware for complex typos / missing spaces)
+    if use_neural:
+        model = get_neural_spelling_model()
+        if model:
+            try:
+                shielded, shield_map = _shield_safety_negations(pre_normalized)
+                outputs = model(shielded, max_length=128, clean_up_tokenization_spaces=True)
+                neural_corrected = outputs[0]["generated_text"]
+                return _unshield_safety_negations(neural_corrected, shield_map)
+            except Exception:
+                pass
+
+    return pre_normalized
 
 
 def preserve_negations(text: str) -> str:
