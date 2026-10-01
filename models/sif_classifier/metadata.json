@@ -1,0 +1,200 @@
+{
+  "model_name": "sif_tfidf_logistic_regression",
+  "model_version": "2.1.0",
+  "training_timestamp_utc": "2026-09-10T03:10:56.346636Z",
+  "dataset_path": "C:\\Users\\Dell\\.gemini\\antigravity-ide\\scratch\\safety-intelligence-platform\\ml\\data\\sif_dataset_v2.csv",
+  "data_source": "Synthetic V2",
+  "is_synthetic_benchmark": true,
+  "total_dataset_rows": 15000,
+  "valid_deduplicated_rows": 14997,
+  "train_rows": 10497,
+  "val_rows": 2250,
+  "test_rows": 2249,
+  "class_labels": [
+    "Non-SIF-potential",
+    "SIF-potential"
+  ],
+  "feature_extractor": "TfidfVectorizer(ngram_range=(1,2), sublinear_tf=True, max_features=6000)",
+  "classifier": "LogisticRegression(class_weight='balanced', max_iter=1000, random_state=42)",
+  "metrics": {
+    "accuracy": 0.8003557136505114,
+    "sif_precision": 0.800711743772242,
+    "sif_recall": 0.8,
+    "sif_f1": 0.8003557136505114,
+    "macro_f1": 0.8003557136505114,
+    "weighted_f1": 0.8003557136505114,
+    "roc_auc": 0.8753167259786476,
+    "pr_auc": 0.8720452019397089,
+    "confusion_matrix": [
+      [
+        900,
+        224
+      ],
+      [
+        225,
+        900
+      ]
+    ]
+  },
+  "explainability": {
+    "top_sif_features": [
+      {
+        "feature": "lifting",
+        "weight": 1.8213
+      },
+      {
+        "feature": "gas",
+        "weight": 1.6869
+      },
+      {
+        "feature": "a",
+        "weight": 1.6115
+      },
+      {
+        "feature": "fall",
+        "weight": 1.6055
+      },
+      {
+        "feature": "hot-work",
+        "weight": 1.5778
+      },
+      {
+        "feature": "repair",
+        "weight": 1.5778
+      },
+      {
+        "feature": "hot-work repair",
+        "weight": 1.5778
+      },
+      {
+        "feature": "isolation",
+        "weight": 1.5475
+      },
+      {
+        "feature": "hoisting",
+        "weight": 1.5433
+      },
+      {
+        "feature": "welding",
+        "weight": 1.4848
+      },
+      {
+        "feature": "during welding",
+        "weight": 1.4424
+      },
+      {
+        "feature": "protection",
+        "weight": 1.4029
+      },
+      {
+        "feature": "fall protection",
+        "weight": 1.4029
+      },
+      {
+        "feature": "testing",
+        "weight": 1.4004
+      },
+      {
+        "feature": "line",
+        "weight": 1.3431
+      }
+    ],
+    "top_non_sif_features": [
+      {
+        "feature": "had",
+        "weight": -3.0878
+      },
+      {
+        "feature": "tool",
+        "weight": -1.8264
+      },
+      {
+        "feature": "tool inspection",
+        "weight": -1.8264
+      },
+      {
+        "feature": "for",
+        "weight": -1.6579
+      },
+      {
+        "feature": "no",
+        "weight": -1.5525
+      },
+      {
+        "feature": "life-saving rule",
+        "weight": -1.466
+      },
+      {
+        "feature": "other",
+        "weight": -1.466
+      },
+      {
+        "feature": "life-saving",
+        "weight": -1.466
+      },
+      {
+        "feature": "other no",
+        "weight": -1.466
+      },
+      {
+        "feature": "no life-saving",
+        "weight": -1.466
+      },
+      {
+        "feature": "under other",
+        "weight": -1.466
+      },
+      {
+        "feature": "rule",
+        "weight": -1.466
+      },
+      {
+        "feature": "communication",
+        "weight": -1.41
+      },
+      {
+        "feature": "barrier",
+        "weight": -1.3625
+      },
+      {
+        "feature": "had minor",
+        "weight": -1.311
+      }
+    ]
+  },
+  "schema_audit": {
+    "field_mapping": {
+      "Reference ID": "report_id",
+      "Date": "date",
+      "Location / Unit": "location",
+      "Report Type": "report_type",
+      "Description": "report_text",
+      "Hazard": null,
+      "Activity": "activity",
+      "Barrier Status": "barrier_failure",
+      "Energy Vector": null,
+      "Worker Exposure": null,
+      "IOGP Life-Saving Rule": "life_saving_rule",
+      "SIF Label": "sif_potential"
+    },
+    "missing_fields": [
+      "Hazard",
+      "Energy Vector",
+      "Worker Exposure"
+    ],
+    "total_columns": 11,
+    "available_columns": [
+      "report_id",
+      "report_type",
+      "date",
+      "location",
+      "activity",
+      "barrier_failure",
+      "observed_severity",
+      "report_text",
+      "sif_potential",
+      "life_saving_rule",
+      "data_source"
+    ]
+  }
+}

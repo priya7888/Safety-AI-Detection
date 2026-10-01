@@ -1,0 +1,123 @@
+================================================================================
+OIL SIF PRECURSOR NLP CLASSIFIER — MODEL TRAINING AND EVALUATION REPORT
+================================================================================
+Generated: 2026-09-10 03:11:18 UTC
+Pipeline Version: 2.1.0
+Model Type: TF-IDF (1-2 ngrams) + Logistic Regression (class_weight='balanced')
+Dataset: sif_dataset_v2.csv
+Data Origin: Synthetic V2 (Authenticity Disclosure)
+
+1. DATASET INTEGRITY & VALIDATION
+--------------------------------------------------------------------------------
+• Total Input Records:         15,000
+• Clean Records After Dedup:   14,997
+• Duplicates Dropped:          3
+• Missing Required Values:     0
+• Class Distribution:          {'SIF-potential': 7499, 'Non-SIF-potential': 7498}
+• Train Set Size (70%):        10,497
+• Validation Set Size (15%):   2,250
+• Test Set Size (15%):         2,249
+• Train/Test Overlap Removed:  1 records
+
+2. COMPARATIVE BENCHMARK EVALUATION (TEST SET N=2,249)
+--------------------------------------------------------------------------------
+Model: Dummy Baseline (Stratified)
+  Accuracy:          51.62%
+  Weighted F1:       51.62%
+  Macro F1:          51.62%
+  SIF Recall:        50.76% (Safety Critical)
+  SIF Precision:     51.67%
+  SIF F1-Score:      51.21%
+  Confusion Matrix:  TN=590, FP=534
+                     FN=554, TP=571
+  ROC-AUC:           0.5162332937920127
+  PR-AUC:            0.6353146699913106
+--------------------------------------------------------------------------------
+Model: Linear SVM (LinearSVC)
+  Accuracy:          79.55%
+  Weighted F1:       79.55%
+  Macro F1:          79.55%
+  SIF Recall:        79.64% (Safety Critical)
+  SIF Precision:     79.50%
+  SIF F1-Score:      79.57%
+  Confusion Matrix:  TN=893, FP=231
+                     FN=229, TP=896
+  ROC-AUC:           None
+  PR-AUC:            None
+--------------------------------------------------------------------------------
+Model: Logistic Regression (Balanced)
+  Accuracy:          80.04%
+  Weighted F1:       80.04%
+  Macro F1:          80.04%
+  SIF Recall:        80.00% (Safety Critical)
+  SIF Precision:     80.07%
+  SIF F1-Score:      80.04%
+  Confusion Matrix:  TN=900, FP=224
+                     FN=225, TP=900
+  ROC-AUC:           0.8753167259786476
+  PR-AUC:            0.8720452019397089
+--------------------------------------------------------------------------------
+
+3. SELECTED PRODUCTION MODEL
+--------------------------------------------------------------------------------
+Selected Model:       Logistic Regression (Balanced)
+Target SIF Recall:    80.00%
+Target SIF Precision: 80.07%
+Target SIF F1-Score:  80.04%
+Overall Test Acc:     80.04%
+ROC-AUC:              0.8753167259786476
+
+4. TOP EXPLAINABLE SIF PREDICTIVE FEATURES (LOG-ODDS WEIGHTS)
+--------------------------------------------------------------------------------
+Positive SIF Indicators:
+  + lifting                      (weight: +1.8213)
+  + gas                          (weight: +1.6869)
+  + a                            (weight: +1.6115)
+  + fall                         (weight: +1.6055)
+  + hot-work                     (weight: +1.5778)
+  + repair                       (weight: +1.5778)
+  + hot-work repair              (weight: +1.5778)
+  + isolation                    (weight: +1.5475)
+  + hoisting                     (weight: +1.5433)
+  + welding                      (weight: +1.4848)
+  + during welding               (weight: +1.4424)
+  + protection                   (weight: +1.4029)
+  + fall protection              (weight: +1.4029)
+  + testing                      (weight: +1.4004)
+  + line                         (weight: +1.3431)
+
+Negative SIF Indicators (Non-SIF Controls):
+  - had                          (weight: -3.0878)
+  - tool                         (weight: -1.8264)
+  - tool inspection              (weight: -1.8264)
+  - for                          (weight: -1.6579)
+  - no                           (weight: -1.5525)
+  - life-saving rule             (weight: -1.4660)
+  - other                        (weight: -1.4660)
+  - life-saving                  (weight: -1.4660)
+  - other no                     (weight: -1.4660)
+  - no life-saving               (weight: -1.4660)
+  - under other                  (weight: -1.4660)
+  - rule                         (weight: -1.4660)
+  - communication                (weight: -1.4100)
+  - barrier                      (weight: -1.3625)
+  - had minor                    (weight: -1.3110)
+
+5. PERSISTED ARTIFACTS
+--------------------------------------------------------------------------------
+• Primary Model Pipeline:      C:\Users\Dell\.gemini\antigravity-ide\scratch\safety-intelligence-platform\models\sif_classifier\pipeline.joblib
+• Standalone Model:            C:\Users\Dell\.gemini\antigravity-ide\scratch\safety-intelligence-platform\models\sif_classifier\model.joblib
+• Standalone Vectorizer:       C:\Users\Dell\.gemini\antigravity-ide\scratch\safety-intelligence-platform\models\sif_classifier\vectorizer.joblib
+• Model Metadata:              C:\Users\Dell\.gemini\antigravity-ide\scratch\safety-intelligence-platform\models\sif_classifier\metadata.json
+• Performance Metrics:         C:\Users\Dell\.gemini\antigravity-ide\scratch\safety-intelligence-platform\models\sif_classifier\metrics.json
+• Full Evaluation Results:     C:\Users\Dell\.gemini\antigravity-ide\scratch\safety-intelligence-platform\models\sif_classifier\training_results.json
+• Legacy Mirrored Model:       C:\Users\Dell\.gemini\antigravity-ide\scratch\safety-intelligence-platform\ml\models\sif_v2_text_tfidf_logistic_regression.joblib
+
+6. OPERATIONAL SAFETY & SMALL DATASET DISCLAIMER
+--------------------------------------------------------------------------------
+This model was trained on validated safety report benchmarks using class-balanced
+loss weighting and strict negation preservation. In accordance with safety-critical
+governance standards, this model is deployed inside a HYBRID DECISION ENGINE
+alongside deterministic barrier diagnostics, energy vector classification, and
+IOGP Life-Saving Rules. Human review remains mandatory for all flagged cases.
+================================================================================

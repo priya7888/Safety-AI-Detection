@@ -4,42 +4,74 @@ import { api } from '../services/api';
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('safetyai_token') || null);
+  const [token, setToken] = useState(() => {
+    try {
+      return localStorage.getItem('safetyai_token') || null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [user, setUser] = useState(() => {
+    try {
+      const storedUser = localStorage.getItem('safetyai_user');
+      return storedUser ? JSON.parse(storedUser) : null;
+    } catch {
+      return null;
+    }
+  });
+
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const initAuth = async () => {
-      const storedToken = localStorage.getItem('safetyai_token');
-      const storedUser = localStorage.getItem('safetyai_user');
-
-      if (storedToken && storedUser) {
-        try {
-          setUser(JSON.parse(storedUser));
-          setToken(storedToken);
-          try {
-            const freshUser = await api.getProfile();
-            setUser(freshUser);
-            localStorage.setItem('safetyai_user', JSON.stringify(freshUser));
-          } catch (err) {
-            if (err?.message?.includes('Unauthorized') || err?.message?.includes('401')) {
-              localStorage.removeItem('safetyai_token');
-              localStorage.removeItem('safetyai_user');
-              setUser(null);
-              setToken(null);
-            }
-          }
-        } catch (e) {
-          localStorage.removeItem('safetyai_token');
-          localStorage.removeItem('safetyai_user');
-          setUser(null);
-          setToken(null);
-        }
-      }
+    // Safety timer ensures loading is never stuck
+    const safetyTimer = setTimeout(() => {
       setLoading(false);
+    }, 400);
+
+    const initAuth = async () => {
+      try {
+        const storedToken = localStorage.getItem('safetyai_token');
+        const storedUser = localStorage.getItem('safetyai_user');
+
+        if (storedToken && storedUser) {
+          try {
+            const parsedUser = JSON.parse(storedUser);
+            setUser(parsedUser);
+            setToken(storedToken);
+            setLoading(false);
+
+            // Fetch latest profile in background without blocking screen render
+            api.getProfile()
+              .then(freshUser => {
+                if (freshUser) {
+                  setUser(freshUser);
+                  localStorage.setItem('safetyai_user', JSON.stringify(freshUser));
+                }
+              })
+              .catch(err => {
+                if (err?.message?.includes('Unauthorized') || err?.message?.includes('401')) {
+                  localStorage.removeItem('safetyai_token');
+                  localStorage.removeItem('safetyai_user');
+                  setUser(null);
+                  setToken(null);
+                }
+              });
+            return;
+          } catch {
+            localStorage.removeItem('safetyai_token');
+            localStorage.removeItem('safetyai_user');
+            setUser(null);
+            setToken(null);
+          }
+        }
+      } finally {
+        setLoading(false);
+      }
     };
 
     initAuth();
+    return () => clearTimeout(safetyTimer);
   }, []);
 
   const login = async (orgId, email, password) => {
@@ -58,8 +90,20 @@ export function AuthProvider({ children }) {
     setToken(null);
   };
 
+  const updateUser = (updatedFields) => {
+    setUser(prev => {
+      const updated = { ...(prev || {}), ...updatedFields };
+      try {
+        localStorage.setItem('safetyai_user', JSON.stringify(updated));
+      } catch (e) {
+        console.error('Failed to save updated user to localStorage', e);
+      }
+      return updated;
+    });
+  };
+
   return (
-    <AuthContext.Provider value={{ user, token, isAuthenticated: !!user, login, logout, loading }}>
+    <AuthContext.Provider value={{ user, token, isAuthenticated: !!user, login, logout, updateUser, loading }}>
       {children}
     </AuthContext.Provider>
   );

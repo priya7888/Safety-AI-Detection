@@ -1,0 +1,56 @@
+{
+  "name": "Logistic Regression (Balanced)",
+  "accuracy": 0.8003557136505114,
+  "precision_macro": 0.800355871886121,
+  "recall_macro": 0.800355871886121,
+  "f1_macro": 0.8003557136505114,
+  "precision_weighted": 0.8003560301217306,
+  "recall_weighted": 0.8003557136505114,
+  "f1_weighted": 0.8003557136505114,
+  "sif_precision": 0.800711743772242,
+  "sif_recall": 0.8,
+  "sif_f1": 0.8003557136505114,
+  "confusion_matrix": [
+    [
+      900,
+      224
+    ],
+    [
+      225,
+      900
+    ]
+  ],
+  "confusion_matrix_labels": [
+    "Non-SIF-potential",
+    "SIF-potential"
+  ],
+  "roc_auc": 0.8753167259786476,
+  "pr_auc": 0.8720452019397089,
+  "classification_report": {
+    "Non-SIF-potential": {
+      "precision": 0.8,
+      "recall": 0.800711743772242,
+      "f1-score": 0.8003557136505114,
+      "support": 1124.0
+    },
+    "SIF-potential": {
+      "precision": 0.800711743772242,
+      "recall": 0.8,
+      "f1-score": 0.8003557136505114,
+      "support": 1125.0
+    },
+    "accuracy": 0.8003557136505114,
+    "macro avg": {
+      "precision": 0.800355871886121,
+      "recall": 0.800355871886121,
+      "f1-score": 0.8003557136505114,
+      "support": 2249.0
+    },
+    "weighted avg": {
+      "precision": 0.8003560301217306,
+      "recall": 0.8003557136505114,
+      "f1-score": 0.8003557136505114,
+      "support": 2249.0
+    }
+  }
+}

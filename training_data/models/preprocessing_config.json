@@ -1,0 +1,11 @@
+{
+  "vectorizer_max_features": 5000,
+  "ngram_range": [
+    1,
+    2
+  ],
+  "stop_words": "english",
+  "typo_normalization": true,
+  "negation_preservation": true,
+  "similarity_algorithm": "Narrative Similarity \u2014 Jaccard Token Similarity"
+}

@@ -13,6 +13,7 @@ import {
   Cpu
 } from 'lucide-react';
 import { api } from '../../services/api';
+import { getStoreState, extractUnitKey } from '../../services/safetyStore';
 
 export default function SubmitReportView({ onReportCreated }) {
   const [reportType, setReportType] = useState('UNSAFE_CONDITION');
@@ -71,11 +72,11 @@ export default function SubmitReportView({ onReportCreated }) {
     setValidationError('');
 
     if (!description.trim() || description.trim().length < 10) {
-      setValidationError('Please provide a descriptive report of at least 10 characters so the AI can extract hazards and barrier states.');
+      setValidationError('Please provide an observation description with at least 10 characters.');
       return;
     }
-    if (!location.trim() || location.trim().length < 2) {
-      setValidationError('Please specify the operational location or plant unit.');
+    if (!location.trim()) {
+      setValidationError('Please specify the operational location or unit.');
       return;
     }
     if (!reportDate) {
@@ -83,6 +84,7 @@ export default function SubmitReportView({ onReportCreated }) {
       return;
     }
 
+    setValidationError(null);
     setIsAnalyzing(true);
     setAnalysisStepIndex(0);
 
@@ -115,19 +117,19 @@ export default function SubmitReportView({ onReportCreated }) {
   };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto space-y-6 select-none">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto space-y-6 select-none text-slate-800">
       
       {/* Intro Header */}
-      <div className="bg-[#090D16] p-6 rounded-2xl border border-slate-800/90 shadow-xl space-y-2">
+      <div className="bg-white p-6 rounded-2xl border border-[#EAE6E1] shadow-xs space-y-2">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
+          <div className="w-10 h-10 rounded-xl bg-[#FFF1EE] border border-[#FFE0D6] flex items-center justify-center text-[#FF5A36] shadow-xs">
             <FileSearch className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-base font-bold text-white font-heading">
+            <h2 className="text-base font-bold text-slate-900 font-heading">
               Ingest & Analyze Free-Text Safety Report
             </h2>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-500">
               Submit free-text field observations. SafetyAI executes multi-stage NLP hazard extraction, energy vector analysis, and IOGP Life-Saving Rule mapping.
             </p>
           </div>
@@ -136,17 +138,17 @@ export default function SubmitReportView({ onReportCreated }) {
 
       {/* Validation Banner */}
       {validationError && (
-        <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-start gap-2.5">
-          <AlertCircle className="w-4 h-4 shrink-0 text-red-400 mt-0.5" />
+        <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start gap-2.5 shadow-xs">
+          <AlertCircle className="w-4 h-4 shrink-0 text-rose-500 mt-0.5" />
           <span>{validationError}</span>
         </div>
       )}
 
       {/* Interactive Pre-Populate Benchmark Scenarios */}
       <div className="space-y-2">
-        <div className="flex items-center justify-between text-xs text-slate-400 font-mono">
+        <div className="flex items-center justify-between text-xs text-slate-500 font-mono">
           <span>QUICK BENCHMARK SCENARIOS</span>
-          <span className="text-amber-400 text-[11px]">Click to auto-fill</span>
+          <span className="text-[#FF5A36] text-[11px] font-semibold">Click to auto-fill</span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {sampleScenarios.map((sc, i) => (
@@ -154,13 +156,13 @@ export default function SubmitReportView({ onReportCreated }) {
               key={i}
               type="button"
               onClick={() => handleApplyScenario(sc)}
-              className="p-3 rounded-xl bg-slate-900/80 border border-slate-800/80 hover:border-amber-500/40 text-left transition-all group cursor-pointer"
+              className="p-3.5 rounded-xl bg-white border border-[#EAE6E1] hover:border-[#FF5A36]/50 text-left transition-all group cursor-pointer shadow-xs hover:shadow-sm"
             >
-              <div className="text-xs font-bold text-white group-hover:text-amber-400 transition-colors flex items-center justify-between">
+              <div className="text-xs font-bold text-slate-900 group-hover:text-[#FF5A36] transition-colors flex items-center justify-between">
                 <span>{sc.title}</span>
-                <Sparkles className="w-3 h-3 text-amber-400 opacity-60 group-hover:opacity-100" />
+                <Sparkles className="w-3 h-3 text-[#FF5A36] opacity-60 group-hover:opacity-100" />
               </div>
-              <div className="text-[10px] text-slate-400 mt-1 truncate">
+              <div className="text-[10px] text-slate-500 mt-1 truncate font-mono">
                 {sc.location}
               </div>
               <div className="text-[10px] text-slate-500 line-clamp-1 mt-0.5">
@@ -172,18 +174,18 @@ export default function SubmitReportView({ onReportCreated }) {
       </div>
 
       {/* Submission Form */}
-      <form onSubmit={handleSubmit} className="bg-[#090D16] p-6 rounded-2xl border border-slate-800/90 shadow-xl space-y-5">
+      <form onSubmit={handleSubmit} className="bg-white p-6 rounded-2xl border border-[#EAE6E1] shadow-xs space-y-5">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           
           {/* Report Type */}
           <div>
-            <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5 font-mono">
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 font-mono">
               Report Category
             </label>
             <select
               value={reportType}
               onChange={(e) => setReportType(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-[#070A12] text-xs text-white rounded-xl border border-slate-700 focus:outline-none focus:border-amber-400 cursor-pointer"
+              className="w-full px-3.5 py-2.5 bg-[#FAF8F5] text-xs text-slate-800 rounded-xl border border-[#EAE6E1] focus:outline-none focus:border-[#FF5A36] focus:bg-white cursor-pointer transition-all"
             >
               <option value="NEAR_MISS">Near-Miss Report</option>
               <option value="UNSAFE_ACT">Unsafe Act (UA)</option>
@@ -194,15 +196,15 @@ export default function SubmitReportView({ onReportCreated }) {
 
           {/* Location */}
           <div>
-            <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5 font-mono">
-              Facility / Operational Site
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 font-mono">
+              Operational Unit / Plant Facility
             </label>
             <input
               type="text"
               value={location}
               onChange={(e) => setLocation(e.target.value)}
-              placeholder="e.g., Drill Floor Rig 9, Bay 2 Heavy Fab..."
-              className="w-full px-3.5 py-2.5 bg-[#070A12] text-xs text-white placeholder-slate-500 rounded-xl border border-slate-700 focus:outline-none focus:border-amber-400"
+              placeholder="e.g., Unit 1, Unit 2 - Substation, Bay 2 Heavy Fab..."
+              className="w-full px-3.5 py-2.5 bg-[#FAF8F5] text-xs text-slate-800 placeholder-slate-400 rounded-xl border border-[#EAE6E1] focus:outline-none focus:border-[#FF5A36] focus:bg-white transition-all"
             />
           </div>
 
@@ -211,7 +213,7 @@ export default function SubmitReportView({ onReportCreated }) {
         {/* Free-Text Observation */}
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider font-mono">
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider font-mono">
               Free-Text Safety Observation / Narrative
             </label>
             <span className="text-[10px] text-slate-500 font-mono">Minimum 10 chars</span>
@@ -221,26 +223,26 @@ export default function SubmitReportView({ onReportCreated }) {
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Describe what occurred, equipment involved, worker actions, and barrier conditions..."
-            className="w-full p-3.5 bg-[#070A12] text-xs text-white placeholder-slate-500 rounded-xl border border-slate-700 focus:outline-none focus:border-amber-400 leading-relaxed font-sans"
+            className="w-full p-3.5 bg-[#FAF8F5] text-xs text-slate-800 placeholder-slate-400 rounded-xl border border-[#EAE6E1] focus:outline-none focus:border-[#FF5A36] focus:bg-white leading-relaxed font-sans transition-all"
           />
         </div>
 
         {/* Date & Additional Context */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5 font-mono">
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 font-mono">
               Event Date
             </label>
             <input
               type="date"
               value={reportDate}
               onChange={(e) => setReportDate(e.target.value)}
-              className="w-full px-3.5 py-2 bg-[#070A12] text-xs text-white rounded-xl border border-slate-700 focus:outline-none focus:border-amber-400"
+              className="w-full px-3.5 py-2 bg-[#FAF8F5] text-xs text-slate-800 rounded-xl border border-[#EAE6E1] focus:outline-none focus:border-[#FF5A36] focus:bg-white transition-all"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5 font-mono">
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 font-mono">
               Additional Context (Optional)
             </label>
             <input
@@ -248,17 +250,17 @@ export default function SubmitReportView({ onReportCreated }) {
               value={additionalContext}
               onChange={(e) => setAdditionalContext(e.target.value)}
               placeholder="Weather, shift change, equipment serial..."
-              className="w-full px-3.5 py-2 bg-[#070A12] text-xs text-white placeholder-slate-500 rounded-xl border border-slate-700 focus:outline-none focus:border-amber-400"
+              className="w-full px-3.5 py-2 bg-[#FAF8F5] text-xs text-slate-800 placeholder-slate-400 rounded-xl border border-[#EAE6E1] focus:outline-none focus:border-[#FF5A36] focus:bg-white transition-all"
             />
           </div>
         </div>
 
         {/* Submit CTA */}
-        <div className="pt-2 border-t border-slate-800 flex justify-end">
+        <div className="pt-2 border-t border-[#EAE6E1] flex justify-end">
           <button
             type="submit"
             disabled={isAnalyzing}
-            className="px-6 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-600 hover:from-amber-400 hover:to-yellow-500 text-slate-950 font-black text-xs transition-all shadow-lg shadow-amber-500/20 hover:scale-105 active:scale-95 cursor-pointer flex items-center gap-2 font-heading tracking-wide"
+            className="px-6 py-3 rounded-xl bg-gradient-to-r from-[#FF5A36] to-[#FFA133] hover:opacity-90 text-white font-bold text-xs transition-all shadow-md shadow-[#FF5A36]/20 hover:scale-[1.02] active:scale-[0.98] cursor-pointer flex items-center gap-2 font-heading tracking-wide"
           >
             <Sparkles className="w-4 h-4 stroke-[2.5]" />
             <span>{isAnalyzing ? 'Executing AI Pipeline...' : 'Analyze Report with SafetyAI'}</span>
@@ -268,18 +270,18 @@ export default function SubmitReportView({ onReportCreated }) {
 
       {/* Multi-Stage AI Pipeline Processing Overlay */}
       {isAnalyzing && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-[#090D16] border border-amber-500/40 rounded-2xl p-6 shadow-2xl space-y-5 animate-in zoom-in-95 text-left">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white border border-[#EAE6E1] rounded-2xl p-6 shadow-2xl space-y-5 animate-in zoom-in-95 text-left">
             
-            <div className="flex items-center gap-3 pb-3 border-b border-slate-800">
-              <div className="w-9 h-9 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-400 animate-spin">
-                <Cpu className="w-5 h-5" />
+            <div className="flex items-center gap-3 pb-3 border-b border-[#EAE6E1]">
+              <div className="w-10 h-10 rounded-xl bg-[#FFF1EE] border border-[#FFE0D6] flex items-center justify-center text-[#FF5A36]">
+                <Cpu className="w-5 h-5 animate-spin" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-white font-heading">
+                <h3 className="text-sm font-bold text-slate-900 font-heading">
                   SafetyAI Precursor Extraction Engine
                 </h3>
-                <p className="text-[11px] text-slate-400 font-mono">
+                <p className="text-[11px] text-slate-500 font-mono">
                   Natural Language Processing & Barrier Verification
                 </p>
               </div>
@@ -294,15 +296,15 @@ export default function SubmitReportView({ onReportCreated }) {
                   <div key={idx} className="flex items-start gap-3">
                     <div className="mt-0.5">
                       {isPast ? (
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                       ) : isCurrent ? (
-                        <span className="w-4 h-4 rounded-full border-2 border-amber-400 border-t-transparent animate-spin block" />
+                        <span className="w-4 h-4 rounded-full border-2 border-[#FF5A36] border-t-transparent animate-spin block" />
                       ) : (
-                        <span className="w-4 h-4 rounded-full border border-slate-700 block" />
+                        <span className="w-4 h-4 rounded-full border border-stone-300 block" />
                       )}
                     </div>
                     <div>
-                      <div className={`text-xs font-bold ${isCurrent ? 'text-amber-400' : isPast ? 'text-slate-200' : 'text-slate-500'}`}>
+                      <div className={`text-xs font-bold ${isCurrent ? 'text-[#FF5A36]' : isPast ? 'text-slate-800' : 'text-slate-400'}`}>
                         {stg.title}
                       </div>
                       <div className="text-[10px] text-slate-500">
@@ -314,7 +316,7 @@ export default function SubmitReportView({ onReportCreated }) {
               })}
             </div>
 
-            <div className="pt-2 border-t border-slate-800 text-[10px] text-slate-400 font-mono text-center">
+            <div className="pt-2 border-t border-[#EAE6E1] text-[10px] text-slate-400 font-mono text-center">
               Target: Oil India Limited HSSE Repository (PS 26165)
             </div>
 

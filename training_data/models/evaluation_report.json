@@ -1,0 +1,121 @@
+{
+  "supervised_sif_feasibility": {
+    "status": "UNSUPPORTED_BY_GROUND_TRUTH",
+    "statement": "Supervised SIF training is not sufficiently supported by the available labeled data. External datasets (OSHA, PHMSA) do not contain verified SIF precursor labels (OSHA records severe injury consequences, while PHMSA records pipeline failures). Supervised models cannot replace evidence-based SIF precursor determination without fabricating labels.",
+    "recommended_approach": "Explainable deterministic/hybrid methods: Jaccard token similarity, deterministic energy vector classifier, deterministic barrier engine, and IOGP Life-Saving Rules matcher."
+  },
+  "trained_nlp_model": "TF-IDF + Logistic Regression Hazard Classifier",
+  "classes": [
+    "Fractures",
+    "Amputations",
+    "Soreness, pain, hurt-nonspecified injury",
+    " Fractures   ",
+    "Cuts, lacerations",
+    " Amputations, avulsions, enucleations  unspecified",
+    "Traumatic injuries and disorders, unspecified",
+    "Heat (thermal) burns, unspecified"
+  ],
+  "class_distribution_test": {
+    "Fractures": 798,
+    "Amputations": 670,
+    "Soreness, pain, hurt-nonspecified injury": 196,
+    " Fractures   ": 175,
+    "Cuts, lacerations": 121,
+    " Amputations, avulsions, enucleations  unspecified": 79,
+    "Traumatic injuries and disorders, unspecified": 53,
+    "Heat (thermal) burns, unspecified": 52
+  },
+  "accuracy": 0.764,
+  "macro_avg": {
+    "precision": 0.6991,
+    "recall": 0.7665,
+    "f1-score": 0.7223
+  },
+  "weighted_avg": {
+    "precision": 0.8057,
+    "recall": 0.764,
+    "f1-score": 0.7779
+  },
+  "confusion_matrix": [
+    [
+      581,
+      15,
+      19,
+      156,
+      15,
+      1,
+      11,
+      0
+    ],
+    [
+      8,
+      552,
+      10,
+      1,
+      2,
+      95,
+      1,
+      1
+    ],
+    [
+      14,
+      10,
+      152,
+      0,
+      4,
+      1,
+      15,
+      0
+    ],
+    [
+      52,
+      1,
+      2,
+      115,
+      3,
+      1,
+      1,
+      0
+    ],
+    [
+      3,
+      3,
+      2,
+      3,
+      105,
+      0,
+      5,
+      0
+    ],
+    [
+      0,
+      37,
+      0,
+      0,
+      2,
+      40,
+      0,
+      0
+    ],
+    [
+      1,
+      0,
+      10,
+      0,
+      1,
+      0,
+      41,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      52
+    ]
+  ]
+}

@@ -1,0 +1,30 @@
+================================================================================
+IOGP LIFE-SAVING RULE NLP CLASSIFIER EVALUATION REPORT
+Problem Statement ID: 26165 (Oil India Limited)
+================================================================================
+Model Artifact:    C:\Users\Dell\.gemini\antigravity-ide\scratch\safety-intelligence-platform\ml\models\iogp_lsr_model.joblib
+Dataset:           C:\Users\Dell\.gemini\antigravity-ide\scratch\safety-intelligence-platform\ml\data\sif_dataset_v2.csv (15,000 rows)
+Train Split:       12,000 (80.0%)
+Test Split:        3,000 (20.0%)
+Accuracy:          0.2937 (29.37%)
+Weighted F1:       0.2938
+Macro F1:          0.2937
+
+Classification Report:
+                           precision    recall  f1-score   support
+
+Bypassing Safety Controls       0.29      0.28      0.29       294
+           Confined Space       0.29      0.31      0.30       294
+                  Driving       0.28      0.31      0.29       309
+         Energy Isolation       0.32      0.31      0.32       300
+                 Hot Work       0.29      0.29      0.29       296
+             Line of Fire       0.32      0.30      0.31       298
+Other/No Life-Saving Rule       0.26      0.27      0.27       289
+  Safe Mechanical Lifting       0.33      0.31      0.32       309
+       Work Authorisation       0.26      0.31      0.28       298
+        Working at Height       0.31      0.25      0.28       313
+
+                 accuracy                           0.29      3000
+                macro avg       0.30      0.29      0.29      3000
+             weighted avg       0.30      0.29      0.29      3000
+

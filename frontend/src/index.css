@@ -1,195 +1,96 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 @layer base {
-  html {
-    font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    scroll-behavior: smooth;
-  }
-  
-  /* Dark mode default */
-  html.dark body {
-    background-color: #040508;
-    color: #e2e8f0;
-    background-image: 
-      radial-gradient(ellipse 90% 60% at 50% -10%, rgba(244, 63, 94, 0.16), transparent 70%),
-      radial-gradient(ellipse 60% 40% at 100% 40%, rgba(139, 92, 246, 0.08), transparent 60%),
-      radial-gradient(ellipse 60% 40% at 0% 70%, rgba(6, 182, 212, 0.07), transparent 60%),
-      radial-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px);
-    background-size: 100% 100%, 100% 100%, 100% 100%, 36px 36px;
-    background-repeat: no-repeat, no-repeat, no-repeat, repeat;
+  :root {
+    --bg-primary: #FAF8F5;
+    --bg-secondary: #F4F1EA;
+    --bg-tertiary: #EDE8DE;
+    --text-primary: #0F172A;
+    --text-secondary: #334155;
+    --text-muted: #64748B;
+    --card-bg: rgba(255, 255, 255, 0.95);
+    --card-border: rgba(226, 218, 206, 0.8);
+    --obsidian-dark: #070709;
+    --amber-gold: #F59E0B;
+    --amber-gold-dark: #D97706;
   }
 
-  /* Light (White) mode */
-  html.light body {
-    background-color: #f8fafc;
-    color: #1e293b;
-    background-image: 
-      radial-gradient(ellipse 90% 50% at 50% -5%, rgba(244, 63, 94, 0.08), transparent 70%),
-      radial-gradient(ellipse 60% 40% at 100% 30%, rgba(59, 130, 246, 0.05), transparent 60%),
-      radial-gradient(ellipse 60% 40% at 0% 70%, rgba(6, 182, 212, 0.05), transparent 60%),
-      radial-gradient(rgba(100, 116, 139, 0.08) 1px, transparent 1px);
-    background-size: 100% 100%, 100% 100%, 100% 100%, 32px 32px;
-    background-repeat: no-repeat, no-repeat, no-repeat, repeat;
+  .dark {
+    --bg-primary: #070709;
+    --bg-secondary: #0D0D11;
+    --bg-tertiary: #14141A;
+    --text-primary: #F8FAFC;
+    --text-secondary: #94A3B8;
+    --text-muted: #64748B;
+    --card-bg: rgba(13, 13, 17, 0.9);
+    --card-border: rgba(255, 255, 255, 0.08);
+    --obsidian-dark: #050507;
+    --amber-gold: #FBBF24;
+    --amber-gold-dark: #F59E0B;
   }
 
   body {
-    margin: 0;
-    min-height: 100vh;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    transition: background-color 0.3s ease, color 0.3s ease;
+    font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Space Grotesk', 'Plus Jakarta Sans', sans-serif;
-    letter-spacing: -0.02em;
-  }
-
-  code, pre, .font-mono {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Outfit', 'Plus Jakarta Sans', system-ui, sans-serif;
   }
 }
 
-@layer utilities {
-  /* Dark Glassmorphism */
-  .dark .glass-card {
-    background: linear-gradient(135deg, rgba(14, 18, 32, 0.75) 0%, rgba(8, 10, 18, 0.85) 100%);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+@keyframes ropeHangingSway {
+  0%, 100% {
+    transform: translateY(-4px) rotate(-3.5deg);
   }
-
-  .dark .glass-panel {
-    background: rgba(10, 13, 24, 0.82);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-    border: 1px solid rgba(255, 255, 255, 0.09);
-  }
-
-  .dark .glass-card-hover:hover {
-    border-color: rgba(244, 63, 94, 0.4);
-    box-shadow: 0 12px 36px -8px rgba(244, 63, 94, 0.22), 0 0 0 1px rgba(244, 63, 94, 0.15);
-    transform: translateY(-3px);
-  }
-
-  /* Light (White) Mode Glassmorphism */
-  .light .glass-card {
-    background: rgba(255, 255, 255, 0.88);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(226, 232, 240, 0.9);
-    box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.05), 0 0 1px 1px rgba(0, 0, 0, 0.03);
-  }
-
-  .light .glass-panel {
-    background: rgba(255, 255, 255, 0.92);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-    border: 1px solid rgba(226, 232, 240, 0.85);
-  }
-
-  .light .glass-card-hover:hover {
-    border-color: rgba(244, 63, 94, 0.4);
-    box-shadow: 0 16px 36px -8px rgba(244, 63, 94, 0.15), 0 0 0 1px rgba(244, 63, 94, 0.2);
-    transform: translateY(-3px);
-  }
-
-  .glass-card-hover {
-    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  /* Radar Sonar Beams */
-  .radar-beam {
-    background: conic-gradient(
-      from 0deg,
-      transparent 0deg,
-      transparent 270deg,
-      rgba(244, 63, 94, 0.03) 290deg,
-      rgba(244, 63, 94, 0.18) 330deg,
-      rgba(244, 63, 94, 0.55) 356deg,
-      rgba(255, 45, 85, 0.95) 360deg
-    );
-  }
-
-  .radar-beam-light {
-    background: conic-gradient(
-      from 0deg,
-      transparent 0deg,
-      transparent 270deg,
-      rgba(244, 63, 94, 0.02) 290deg,
-      rgba(244, 63, 94, 0.15) 330deg,
-      rgba(244, 63, 94, 0.45) 356deg,
-      rgba(244, 63, 94, 0.85) 360deg
-    );
-  }
-
-  /* Glow Effects */
-  .text-glow-rose {
-    text-shadow: 0 0 24px rgba(244, 63, 94, 0.65), 0 0 40px rgba(244, 63, 94, 0.3);
-  }
-
-  .text-glow-emerald {
-    text-shadow: 0 0 24px rgba(16, 185, 129, 0.65), 0 0 40px rgba(16, 185, 129, 0.3);
-  }
-
-  .text-glow-amber {
-    text-shadow: 0 0 24px rgba(245, 158, 11, 0.65), 0 0 40px rgba(245, 158, 11, 0.3);
-  }
-
-  /* Typography Gradients */
-  .gradient-heading {
-    background: linear-gradient(180deg, #ffffff 0%, #cbd5e1 60%, #94a3b8 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-  }
-
-  .light .gradient-heading {
-    background: linear-gradient(180deg, #0f172a 0%, #334155 60%, #475569 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-  }
-
-  .gradient-heading-rose {
-    background: linear-gradient(180deg, #ffffff 15%, #fda4af 55%, #f43f5e 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-  }
-
-  .light .gradient-heading-rose {
-    background: linear-gradient(180deg, #0f172a 15%, #e11d48 60%, #f43f5e 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-  }
-
-  /* Custom Cyber Scrollbars */
-  .scrollbar-cyber::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
-  .dark .scrollbar-cyber::-webkit-scrollbar-track {
-    background: rgba(10, 13, 24, 0.6);
-    border-radius: 9999px;
-  }
-  .dark .scrollbar-cyber::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.18);
-    border-radius: 9999px;
-  }
-  .dark .scrollbar-cyber::-webkit-scrollbar-thumb:hover {
-    background: rgba(244, 63, 94, 0.5);
-  }
-
-  .light .scrollbar-cyber::-webkit-scrollbar-track {
-    background: rgba(241, 245, 249, 0.8);
-    border-radius: 9999px;
-  }
-  .light .scrollbar-cyber::-webkit-scrollbar-thumb {
-    background: rgba(148, 163, 184, 0.4);
-    border-radius: 9999px;
-  }
-  .light .scrollbar-cyber::-webkit-scrollbar-thumb:hover {
-    background: rgba(244, 63, 94, 0.5);
+  50% {
+    transform: translateY(5px) rotate(3.5deg);
   }
 }
+
+@keyframes ropeClimbingFast {
+  0%, 100% {
+    transform: scale(1.1) translateY(-6px) rotate(-6deg);
+  }
+  50% {
+    transform: scale(1.1) translateY(6px) rotate(6deg);
+  }
+}
+
+.animate-silly-bob {
+  animation: ropeHangingSway 2s ease-in-out infinite;
+}
+
+.animate-silly-drag {
+  animation: ropeClimbingFast 0.3s ease-in-out infinite;
+}
+
+/* Modern Warm-Light Platform Theme Helpers */
+.platform-card {
+  background-color: #FFFFFF;
+  border: 1px solid #EAE6E1;
+  border-radius: 1rem;
+  box-shadow: 0 2px 8px -2px rgba(15, 23, 42, 0.04), 0 1px 4px -1px rgba(15, 23, 42, 0.02);
+}
+
+.platform-card-elevated {
+  background-color: #FFFFFF;
+  border: 1px solid #E2DCD5;
+  border-radius: 1.25rem;
+  box-shadow: 0 8px 24px -4px rgba(15, 23, 42, 0.06), 0 4px 12px -2px rgba(15, 23, 42, 0.03);
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #E2DCD5;
+  border-radius: 9999px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #CBD5E1;
+}
+

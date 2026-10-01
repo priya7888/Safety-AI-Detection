@@ -1,112 +1,175 @@
-import React, { useState } from 'react';
-import TopNavbar from './TopNavbar';
+import React, { useState, Component } from 'react';
+import Sidebar from './Sidebar';
+import Header from './Header';
+import { useAuth } from '../../context/AuthContext';
+
+// Error Boundary to prevent any child view from ever crashing the whole screen
+class PlatformErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    console.error('Platform view error:', error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-8 max-w-xl mx-auto my-12 bg-slate-900/90 border border-amber-500/40 rounded-2xl text-center space-y-4 shadow-2xl">
+          <div className="w-12 h-12 mx-auto rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-lg">
+            ⚠
+          </div>
+          <h2 className="text-lg font-bold text-white">Platform View Recovered</h2>
+          <p className="text-xs text-slate-300 font-mono bg-slate-950 p-3 rounded-lg overflow-x-auto text-left">
+            {this.state.error?.message || 'An unexpected rendering issue occurred.'}
+          </p>
+          <button
+            onClick={() => {
+              this.setState({ hasError: false, error: null });
+              if (this.props.onReset) this.props.onReset();
+            }}
+            className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-xl transition-all cursor-pointer"
+          >
+            Reload View
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// 13 Multi-Page Platform Views
 import DashboardView from './DashboardView';
-import SubmitReportView from './SubmitReportView';
-import SafetyReportsView from './SafetyReportsView';
 import AIAnalysisView from './AIAnalysisView';
 import BulkUploadView from './BulkUploadView';
 import AllReportsView from './AllReportsView';
-import SIFIntelligenceView from './SIFIntelligenceView';
-import ReviewFeedbackView from './ReviewFeedbackView';
-import FullAnalysisModal from './FullAnalysisModal';
+import WeekSignalsView from './WeekSignalsView';
+import StrongReportView from './StrongReportView';
+import SIFPrecursorsView from './SIFPrecursorsView';
+import AlertsView from './AlertsView';
+import CorrectiveActionsView from './CorrectiveActionsView';
+import AnalyticsView from './AnalyticsView';
+import RiskHeatmapView from './RiskHeatmapView';
+import LifeSavingRulesView from './LifeSavingRulesView';
+import SettingsView from './SettingsView';
 
-export default function OrganizationPlatform() {
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [showSymbols, setShowSymbols] = useState(false);
-  const [selectedReportForModal, setSelectedReportForModal] = useState(null);
-  const [refreshKey, setRefreshKey] = useState(0);
+export default function OrganizationPlatform({ 
+  currentPath = '/dashboard', 
+  onNavigate, 
+  onExitPlatform 
+}) {
+  const { user } = useAuth();
+  const isAdmin = Boolean(
+    user?.is_admin || 
+    user?.role === 'ADMINISTRATOR' || 
+    user?.role_name === 'Administrator' || 
+    (user?.email && user.email.toLowerCase().includes('admin'))
+  );
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('safetyai_sidebar_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
 
-  const handleSelectReport = (report) => {
-    setSelectedReportForModal(report);
+  const toggleSidebarCollapse = () => {
+    setIsSidebarCollapsed(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('safetyai_sidebar_collapsed', String(next));
+      } catch {}
+      return next;
+    });
   };
 
-  const handleRefresh = () => {
-    setRefreshKey(prev => prev + 1);
-  };
+  // Render the appropriate view based on the current route path
+  const renderCurrentView = () => {
+    switch (currentPath) {
+      case '/dashboard':
+        return <DashboardView onNavigate={onNavigate} />;
 
-  const handleReportCreated = (newReportId) => {
-    handleRefresh();
-    setActiveTab('all_reports');
+      case '/ai-analysis':
+        return <AIAnalysisView onNavigate={onNavigate} />;
+
+      case '/bulk-upload':
+        return <BulkUploadView onNavigate={onNavigate} />;
+
+      case '/reports':
+        return <AllReportsView onNavigate={onNavigate} />;
+
+      case '/week-signals':
+        return <WeekSignalsView onNavigate={onNavigate} />;
+
+      case '/strong-report':
+        return <StrongReportView onNavigate={onNavigate} />;
+
+      case '/admin':
+      case '/admin-dashboard':
+      case '/sif-precursors':
+        return <SIFPrecursorsView onNavigate={onNavigate} />;
+
+      case '/critical-alerts':
+        return <AlertsView onNavigate={onNavigate} />;
+
+      case '/corrective-actions':
+        return <CorrectiveActionsView onNavigate={onNavigate} />;
+
+      case '/analytics':
+        return <AnalyticsView onNavigate={onNavigate} />;
+
+      case '/risk-heatmap':
+        return <RiskHeatmapView onNavigate={onNavigate} />;
+
+      case '/life-saving-rules':
+        return <LifeSavingRulesView onNavigate={onNavigate} />;
+
+      case '/settings':
+        return <SettingsView onNavigate={onNavigate} />;
+
+      default:
+        return <DashboardView onNavigate={onNavigate} />;
+    }
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] relative overflow-x-hidden text-slate-900 flex flex-col font-sans antialiased selection:bg-blue-600 selection:text-white">
+    <div className="min-h-screen bg-[#F4F6F8] text-slate-800 flex flex-col font-sans selection:bg-orange-100 selection:text-[#FF5A36]">
       
-      {/* Ambient Radial Gradient Glow Orbs for Glassmorphism Depth */}
-      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
-        <div className="absolute -top-32 -right-32 w-[650px] h-[650px] rounded-full bg-blue-500/8 blur-[120px]" />
-        <div className="absolute top-1/3 -left-32 w-[600px] h-[600px] rounded-full bg-indigo-500/8 blur-[130px]" />
-        <div className="absolute -bottom-40 right-1/4 w-[700px] h-[700px] rounded-full bg-sky-400/10 blur-[140px]" />
-      </div>
-
-      {/* 1. Top Horizontal Navigation Bar */}
-      <TopNavbar 
-        activeTab={activeTab} 
-        setActiveTab={setActiveTab}
-        showSymbols={showSymbols}
-        setShowSymbols={setShowSymbols}
+      {/* 1. Shared Left Enterprise Sidebar with dark navy palette (Static & Fixed) */}
+      <Sidebar 
+        currentPath={currentPath}
+        onNavigate={onNavigate}
+        isOpen={mobileSidebarOpen}
+        onClose={() => setMobileSidebarOpen(false)}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={toggleSidebarCollapse}
+        onExitPlatform={onExitPlatform}
       />
 
-      {/* 2. Full-Width Main Content View Routing */}
-      <main className="flex-1 pb-16 relative z-10">
-        {activeTab === 'dashboard' && (
-          <DashboardView 
-            key={refreshKey}
-            onSelectReport={handleSelectReport}
-            onOpenSafetyReports={() => setActiveTab('all_reports')}
-            onOpenAIAnalysis={() => setActiveTab('ai_analysis')}
-            showSymbols={showSymbols}
-            setShowSymbols={setShowSymbols}
-          />
-        )}
-
-        {activeTab === 'ai_analysis' && (
-          <AIAnalysisView 
-            onSelectReport={handleSelectReport}
-          />
-        )}
-
-        {activeTab === 'bulk_upload' && (
-          <BulkUploadView 
-            onSelectReport={handleSelectReport}
-            onOpenAllReports={() => setActiveTab('all_reports')}
-          />
-        )}
-
-        {activeTab === 'all_reports' && (
-          <AllReportsView 
-            key={refreshKey}
-            onSelectReport={handleSelectReport}
-          />
-        )}
-
-        {activeTab === 'weak_signals' && (
-          <SIFIntelligenceView 
-            onSelectReport={handleSelectReport}
-          />
-        )}
-
-        {activeTab === 'submit_report' && (
-          <SubmitReportView 
-            onReportCreated={handleReportCreated}
-          />
-        )}
-
-        {activeTab === 'review_feedback' && (
-          <ReviewFeedbackView 
-            key={refreshKey}
-            onSelectReport={handleSelectReport}
-          />
-        )}
-      </main>
-
-      {/* 3. Explainable Full AI Analysis Details Modal */}
-      {selectedReportForModal && (
-        <FullAnalysisModal 
-          report={selectedReportForModal}
-          onClose={() => setSelectedReportForModal(null)}
+      {/* 2. Main Content Area with Clean Light Gray Canvas (Offset by lg:pl-64 or lg:pl-20 for collapsed sidebar) */}
+      <div className={`flex-1 flex flex-col min-w-0 min-h-screen bg-[#F4F6F8] transition-all duration-300 ${isSidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64'}`}>
+        {/* Shared Top Header */}
+        <Header 
+          currentPath={currentPath}
+          onNavigate={onNavigate}
+          onOpenSidebar={() => setMobileSidebarOpen(true)}
+          onToggleSidebar={toggleSidebarCollapse}
+          isSidebarCollapsed={isSidebarCollapsed}
+          onExitPlatform={onExitPlatform}
         />
-      )}
+
+        {/* Dynamic Route View Page */}
+        <main className="flex-1 bg-[#F4F6F8]">
+          <PlatformErrorBoundary onReset={() => onNavigate && onNavigate('/dashboard')}>
+            {renderCurrentView()}
+          </PlatformErrorBoundary>
+        </main>
+      </div>
 
     </div>
   );

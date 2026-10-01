@@ -256,7 +256,7 @@ export default function InteractiveAiDemoModal({ isOpen, onClose }) {
               </div>
 
               <div className="flex items-center gap-2">
-                <span className="text-xs font-mono text-slate-400">Confidence Score:</span>
+                <span className="text-xs font-mono text-slate-400">Risk Score:</span>
                 <span className={`px-3 py-1 rounded-full text-xs font-mono font-black ${
                   analysisResult.isSIF ? 'bg-red-500 text-white' : 'bg-emerald-500 text-white'
                 }`}>

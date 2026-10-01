@@ -1,0 +1,132 @@
+================================================================================
+SIF ML MODEL vs. RULE-BASED DISAGREEMENT ANALYSIS REPORT (STEP 20)
+================================================================================
+Model: ml/models/sif_v2_text_tfidf_logistic_regression.joblib
+Source Test: Step 19 Robustness Evaluation (10 scenarios)
+Disagreements Identified: 4 out of 10 cases (40.0%)
+
+--------------------------------------------------------------------------------
+1. DETAILED INVESTIGATION OF THE 4 DISAGREEMENT CASES
+--------------------------------------------------------------------------------
+
+Case 4: Electrical hazard
+- Report Description:
+  "Damaged 440V power cable submerged in rainwater puddle near personnel walkway."
+- ML Prediction: SIF-potential
+- ML Confidence: 54.50% (Probabilities: Non-SIF: 45.50%, SIF: 54.50%)
+- Rule-Based Assessment: INSUFFICIENT_INFORMATION
+- Rule-Based Diagnostic Signals:
+  * Hazard Detected: None (Dictionary did not match "power cable" or "submerged")
+  * Safety Signals: []
+  * Energy Detected: Electrical Energy (440V trigger)
+  * Exposure Detected: None (walkway proximity not recognized as direct contact)
+  * Barrier Detected: BARRIER_UNKNOWN
+- Reason for Disagreement:
+  Rule-based keyword dictionary rigidity. In sif_assessment.py, a report defaults
+  to INSUFFICIENT_INFORMATION if hazard is None and signals is empty. Even though
+  440V electrical energy was detected, the lack of an explicit hazard string or
+  active personnel exposure phrase forced the rule into its conservative fallback.
+  Meanwhile, the ML model captured the n-grams "440v", "damaged", and "walkway",
+  recognizing potential high-energy danger.
+- Low-Confidence Analysis:
+  Confidence was 54.50% (near the 50% decision boundary) because "rainwater",
+  "puddle", and "walkway" appear across both weather/housekeeping and high-risk
+  reports in synthetic training data, creating statistical uncertainty.
+- Assessment: Reasonable disagreement. Submerged live 440V cables near walkways
+  pose severe electrocution risks. The ML model detected the underlying risk
+  that slipped past rigid rule keywords.
+
+Case 7: Dropped-object hazard
+- Report Description:
+  "Heavy steel pipe clamp fell from rig floor Derrick to walkway with no barricade."
+- ML Prediction: SIF-potential
+- ML Confidence: 70.36% (Probabilities: Non-SIF: 29.64%, SIF: 70.36%)
+- Rule-Based Assessment: NO
+- Rule-Based Diagnostic Signals:
+  * Hazard Detected: None (Lacked literal keywords "dropped object" or "suspended load")
+  * Safety Signals: ['Unguarded edge or floor opening lacking compliant physical barrier']
+  * Energy Detected: Gravity (Falling mass from rig floor)
+  * Exposure Detected: None
+  * Barrier Detected: BARRIER_MISSING ("no barricade")
+- Reason for Disagreement:
+  Rule engine gate condition. The rule logic requires `hazard` to be non-None
+  to trigger `is_high_energy_hazard = True`. Because `detect_hazard()` did not
+  find the exact lemma "dropped object" (the text used "fell from rig floor Derrick"),
+  `is_high_energy_hazard` evaluated to False, causing the rule to default to "NO"
+  despite detecting gravitational energy and missing barricades.
+  The ML model, conversely, generalized from n-grams ("fell from", "rig floor",
+  "derrick", "walkway"), correctly identifying SIF-potential with 70.36% confidence.
+- Assessment: Reasonable disagreement. A falling heavy clamp in a rig walkway is
+  a textbook dropped-object SIF precursor. The ML model caught what the rigid
+  rule missed.
+
+Case 9: Minor housekeeping issue
+- Report Description:
+  "Small empty cardboard boxes left beside emergency exit door, cleared right away."
+- ML Prediction: Non-SIF-potential
+- ML Confidence: 63.62% (Probabilities: Non-SIF: 63.62%, SIF: 36.38%)
+- Rule-Based Assessment: INSUFFICIENT_INFORMATION
+- Rule-Based Diagnostic Signals:
+  * Hazard Detected: None (Text omitted literal keyword "housekeeping" or "slip/trip")
+  * Safety Signals: []
+  * Energy Detected: None
+  * Exposure Detected: None
+  * Barrier Detected: BARRIER_UNKNOWN
+- Reason for Disagreement:
+  Rule fallback vs. ML semantic classification. The rule engine only classifies
+  a report as "NO" if it detects specific low-energy hazard labels (e.g. "Slip, Trip,
+  or Surface Housekeeping"). Without this explicit label, it conservatively outputs
+  INSUFFICIENT_INFORMATION. The ML model generalized the benign narrative
+  ("small empty", "cleared right away"), correctly predicting Non-SIF-potential.
+- Assessment: Reasonable disagreement. Both systems agree this is not a confirmed SIF;
+  the rule withholds definitive judgment while the ML model provides a concrete negative.
+
+Case 10: Low-risk procedural observation
+- Report Description:
+  "Technician completed routine tool audit and updated paperwork after shift."
+- ML Prediction: Non-SIF-potential
+- ML Confidence: 69.18% (Probabilities: Non-SIF: 69.18%, SIF: 30.82%)
+- Rule-Based Assessment: INSUFFICIENT_INFORMATION
+- Rule-Based Diagnostic Signals:
+  * Hazard Detected: None
+  * Safety Signals: []
+  * Energy Detected: None
+  * Exposure Detected: None
+  * Barrier Detected: BARRIER_UNKNOWN
+- Reason for Disagreement:
+  Rule fallback vs. ML semantic classification. Purely administrative paperwork
+  observations have no hazard keywords in the rule dictionary, triggering
+  INSUFFICIENT_INFORMATION. The ML model recognized standard administrative terms
+  ("routine", "audit", "paperwork", "after shift") as strong Non-SIF indicators.
+- Assessment: Reasonable disagreement. The rule safely avoids assumptions, whereas
+  the ML model appropriately detects routine operational context.
+
+--------------------------------------------------------------------------------
+2. ROOT CAUSE SUMMARY
+--------------------------------------------------------------------------------
+- Primary Cause: Rule-based keyword matching rigidity (3 of 4 cases: 4, 7, 9).
+  The rule engine depends on exact lexicon dictionary matches to populate
+  the `hazard` variable. When phrasing varies naturally (e.g. "power cable"
+  instead of "arc flash", or "fell from Derrick" instead of "dropped object"),
+  the rule engine either drops to INSUFFICIENT_INFORMATION or defaults to NO.
+- Secondary Cause: Rule fallback conservatism (2 of 4 cases: 9, 10).
+  The rule engine conservatively withholds a "NO" unless an explicit low-energy
+  hazard label is detected, while the ML model confidently assigns Non-SIF.
+- Tertiary Cause: Statistical boundary uncertainty (1 case: Case 4).
+  Environmental co-occurrences in synthetic training text caused ML confidence
+  to sit at 54.50%.
+- Suspicious Cases: 0. None of the disagreements indicate data corruption,
+  leakage exploits, or catastrophic model failure.
+
+--------------------------------------------------------------------------------
+3. COMPARISON TABLE
+--------------------------------------------------------------------------------
+Case | ML Prediction     | Confidence | Rule Result              | Reason for Disagreement                 | Assessment
+4    | SIF-potential     | 54.50%     | INSUFFICIENT_INFORMATION | Missing rule keyword; ML detects 440V   | Reasonable (ML caught risk)
+7    | SIF-potential     | 70.36%     | NO                       | Rule missed "dropped object" lemma       | Reasonable (ML caught precursor)
+9    | Non-SIF-potential | 63.62%     | INSUFFICIENT_INFORMATION | Rule fallback vs ML benign detection     | Reasonable (Both non-SIF)
+10   | Non-SIF-potential | 69.18%     | INSUFFICIENT_INFORMATION | Administrative text lacks rule hazard    | Reasonable (Both non-SIF)
+
+================================================================================
+END OF REPORT
+================================================================================

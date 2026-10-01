@@ -1,51 +1,49 @@
-"""
-FastAPI application entrypoint for the SIF Precursor Detection Engine.
-
-Run with:
-    uvicorn app.main:app --reload
-"""
-import os
-from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from .database import engine, Base
+from .config import settings
+from .routers import auth, reports, analysis, sif_intelligence, feedback, dashboard, weak_signals, sif_precursors
+from .seed_data import seed_sample_data
 
-from app.database import Base, engine
-from app import models  # noqa: F401  (ensures models are registered on Base.metadata)
-from app.routers import reports, analytics, dashboard
+# Create DB Tables
+Base.metadata.create_all(bind=engine)
 
-load_dotenv()
-
+# Create FastAPI app
 app = FastAPI(
-    title="SafetyAI - SIF Precursor Detection Engine",
-    description="AI/NLP engine to detect Serious Injury & Fatality (SIF) precursors "
-                "in Unsafe Act, Unsafe Condition and Near-Miss safety reports.",
-    version="1.0.0",
+    title=settings.PROJECT_NAME,
+    description="AI-Powered SIF Precursor Detection & Safety Intelligence for Smart India Hackathon PS 165",
+    version="2.0.0"
 )
 
-# --- CORS ---------------------------------------------------------------
-cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
+# Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[o.strip() for o in cors_origins if o.strip()],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# --- Database -------------------------------------------------------------
-Base.metadata.create_all(bind=engine)
-
-# --- Routers ----------------------------------------------------------------
-app.include_router(dashboard.router)
+# Register Routers
+app.include_router(auth.router)
 app.include_router(reports.router)
-app.include_router(analytics.router)
+app.include_router(analysis.router)
+app.include_router(analysis.ai_analysis_router)
+app.include_router(sif_intelligence.router)
+app.include_router(feedback.router)
+app.include_router(dashboard.router)
+app.include_router(weak_signals.router)
+app.include_router(sif_precursors.router)
 
+@app.on_event("startup")
+def startup_event():
+    seed_sample_data()
 
 @app.get("/")
 def root():
-    return {"status": "ok", "service": "SIF Precursor Detection Engine API"}
-
-
-@app.get("/health")
-def health():
-    return {"status": "healthy"}
+    return {
+        "status": "online",
+        "service": settings.PROJECT_NAME,
+        "tagline": settings.TAGLINE,
+        "api_docs": "/docs"
+    }

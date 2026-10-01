@@ -1,0 +1,78 @@
+SIF POTENTIAL MODEL EVALUATION REPORT
+Generated from: C:\Users\Rohini\OneDrive\Documents\sih26\ml\data\sif_dataset.csv
+Random State: 42 | Train/Test Split: 80/20 Stratified
+Features Used: report_type, location, activity, barrier_failure, observed_severity, life_saving_rule
+Excluded Features (Leakage Prevention): report_id, date, report_text, data_source
+
+============================================================
+Model: Logistic Regression
+============================================================
+Overall Accuracy:       0.5217 (52.17%)
+Weighted F1-Score:      0.4923
+Weighted Precision:     0.5282
+Weighted Recall:        0.5217
+------------------------------------------------------------
+SIF-potential Class Focus:
+  Precision:            0.5146
+  Recall:               0.7620
+  F1-Score:             0.6144
+------------------------------------------------------------
+Confusion Matrix (rows: actual, cols: predicted):
+  Labels: ['SIF-potential', 'Non-SIF-potential']
+  [[ 1143 (TP: SIF),       357 (FN: SIF->Non)]
+   [ 1078 (FP: Non->SIF),   422 (TN: Non)]]
+------------------------------------------------------------
+Classification Report:
+                   precision    recall  f1-score   support
+
+Non-SIF-potential     0.5417    0.2813    0.3703      1500
+    SIF-potential     0.5146    0.7620    0.6144      1500
+
+         accuracy                         0.5217      3000
+        macro avg     0.5282    0.5217    0.4923      3000
+     weighted avg     0.5282    0.5217    0.4923      3000
+
+
+
+============================================================
+Model: Random Forest Classifier
+============================================================
+Overall Accuracy:       0.5133 (51.33%)
+Weighted F1-Score:      0.5132
+Weighted Precision:     0.5133
+Weighted Recall:        0.5133
+------------------------------------------------------------
+SIF-potential Class Focus:
+  Precision:            0.5129
+  Recall:               0.5287
+  F1-Score:             0.5207
+------------------------------------------------------------
+Confusion Matrix (rows: actual, cols: predicted):
+  Labels: ['SIF-potential', 'Non-SIF-potential']
+  [[  793 (TP: SIF),       707 (FN: SIF->Non)]
+   [  753 (FP: Non->SIF),   747 (TN: Non)]]
+------------------------------------------------------------
+Classification Report:
+                   precision    recall  f1-score   support
+
+Non-SIF-potential     0.5138    0.4980    0.5058      1500
+    SIF-potential     0.5129    0.5287    0.5207      1500
+
+         accuracy                         0.5133      3000
+        macro avg     0.5133    0.5133    0.5132      3000
+     weighted avg     0.5133    0.5133    0.5132      3000
+
+
+============================================================
+MODEL SELECTION DECISION
+============================================================
+Selected Model:       Random Forest Classifier
+Primary Metric:       Weighted F1-Score = 0.5132
+SIF Class F1-Score:   0.5207
+Test Accuracy:        0.5133
+Selection Rationale:  The model was selected primarily based on F1-score
+                      (harmonic mean of precision & recall) rather than
+                      accuracy alone, ensuring robust identification of
+                      high-consequence SIF events while minimizing false
+                      negatives.
+============================================================

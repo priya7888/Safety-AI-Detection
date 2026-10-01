@@ -140,9 +140,17 @@ export default function TopNavbar({
 
             {/* Profile Avatar & Details */}
             <div className="flex items-center gap-2.5 pl-2 border-l border-slate-200/80">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-black text-xs flex items-center justify-center shadow-xs ring-2 ring-blue-500/20">
-                {user?.full_name ? user.full_name.charAt(0).toUpperCase() : 'O'}
-              </div>
+              {user?.avatar ? (
+                <img 
+                  src={user.avatar} 
+                  alt={user?.full_name || 'User'} 
+                  className="w-9 h-9 rounded-xl object-cover ring-2 ring-blue-500/20 shadow-xs"
+                />
+              ) : (
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-black text-xs flex items-center justify-center shadow-xs ring-2 ring-blue-500/20">
+                  {user?.full_name ? user.full_name.charAt(0).toUpperCase() : 'O'}
+                </div>
+              )}
               <div className="hidden lg:block text-left">
                 <div className="text-xs font-extrabold text-slate-900 leading-tight">
                   {user?.full_name || 'HSE Lead Officer'}

@@ -1,907 +1,1099 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   FileText, 
-  CheckCircle2, 
-  ShieldAlert, 
-  AlertTriangle,
-  Zap,
-  Shield,
-  Eye,
-  FileCheck,
-  ChevronDown,
-  ChevronUp,
+  Zap, 
+  AlertTriangle, 
+  Cpu, 
+  CheckSquare, 
+  ShieldCheck, 
+  TrendingUp, 
+  TrendingDown, 
+  AlertOctagon, 
+  Sparkles, 
   ArrowRight, 
-  Sparkles,
-  ExternalLink,
-  Filter,
-  CheckCircle,
-  Search,
+  ChevronRight, 
+  ShieldAlert,
+  ArrowUpRight,
+  Activity,
+  CheckCircle2,
+  Clock,
+  ChevronDown,
+  Lightbulb,
+  Layers,
+  BarChart3,
+  PieChart as PieChartIcon,
   X,
   MapPin,
+  Building2,
+  Search,
   Flame,
-  Activity,
-  Info
+  Minus,
+  ExternalLink,
+  UploadCloud
 } from 'lucide-react';
 import { api } from '../../services/api';
+import { 
+  getStoreState, 
+  subscribeSafetyStore, 
+  getDashboardMetrics, 
+  getTodayDateString,
+  clearAllSafetyData,
+  syncBackendReportsToStore
+} from '../../services/safetyStore';
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  AreaChart,
+  Area,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  PieChart,
+  Pie,
+  Cell
+} from 'recharts';
 
-export default function DashboardView({ 
-  onSelectReport, 
-  onOpenSafetyReports, 
-  onOpenAIAnalysis,
-  showSymbols,
-  setShowSymbols
-}) {
-  const [dashboardData, setDashboardData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  
-  // Interactive Filters & Search
-  const [selectedFilter, setSelectedFilter] = useState('ALL'); // 'ALL', 'SIF', 'NON_SIF', 'UNSAFE_ACT', 'UNSAFE_CONDITION', 'NEAR_MISS'
-  const [searchQuery, setSearchQuery] = useState('');
-  const [hoveredSlice, setHoveredSlice] = useState(null);
-  const [hoveredBar, setHoveredBar] = useState(null);
+export default function DashboardView({ onNavigate }) {
+  const [storeState, setStoreState] = useState(getStoreState());
+  const [storeMetrics, setStoreMetrics] = useState(getDashboardMetrics());
+  const [backendMetrics, setBackendMetrics] = useState(null);
 
   useEffect(() => {
-    fetchDashboard();
+    // Load dynamic metrics directly from the authenticated backend database
+    api.getDashboardData()
+      .then(data => {
+        if (data) {
+          setBackendMetrics(data);
+          if (data.total_reports === 0) {
+            clearAllSafetyData();
+          }
+        }
+      })
+      .catch(() => {});
+
+    api.getReports()
+      .then(backendReports => {
+        if (Array.isArray(backendReports)) {
+          if (backendReports.length === 0) {
+            clearAllSafetyData();
+          } else {
+            syncBackendReportsToStore(backendReports, [], true);
+          }
+        }
+      })
+      .catch(() => {});
+
+    const unsub = subscribeSafetyStore((newState) => {
+      setStoreState(newState);
+      setStoreMetrics(getDashboardMetrics());
+      api.getDashboardData()
+        .then(data => {
+          if (data) setBackendMetrics(data);
+        })
+        .catch(() => {});
+    });
+    return unsub;
   }, []);
 
-  const fetchDashboard = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await api.getDashboardData();
-      setDashboardData(data);
-    } catch (err) {
-      console.error('Failed to fetch dashboard data:', err);
-      setError(err.message || 'Could not load organization dashboard data.');
-    } finally {
-      setLoading(false);
+  const [trendRange, setTrendRange] = useState('7 Days');
+  const [activeHazard, setActiveHazard] = useState(null);
+  const [activeClassification, setActiveClassification] = useState(null);
+  const [donutHoverIndex, setDonutHoverIndex] = useState(null);
+  const [selectedSite, setSelectedSite] = useState('ALL');
+  const [currentTodayDate, setCurrentTodayDate] = useState(() => getTodayDateString());
+
+  // Automatically update daily date when the clock crosses midnight (after 12 AM)
+  useEffect(() => {
+    const checkDateInterval = setInterval(() => {
+      const nowStr = getTodayDateString();
+      setCurrentTodayDate(prev => (prev !== nowStr ? nowStr : prev));
+    }, 30000);
+
+    return () => clearInterval(checkDateInterval);
+  }, []);
+
+  // Dynamic weak signals loaded solely from the backend
+  const [weakSignalSearch, setWeakSignalSearch] = useState('');
+  const [weakSignalsList, setWeakSignalsList] = useState([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    api.getWeakSignals()
+      .then((data) => {
+        if (isMounted && data?.weak_signals) {
+          setWeakSignalsList(data.weak_signals);
+        }
+      })
+      .catch(() => {});
+    return () => { isMounted = false; };
+  }, []);
+
+  const filteredWeakSignals = weakSignalsList
+    .filter((sig) => {
+      const q = weakSignalSearch.trim().toLowerCase();
+      if (!q) return true;
+      return (
+        (sig.title || '').toLowerCase().includes(q) ||
+        (sig.category || '').toLowerCase().includes(q) ||
+        (sig.signal_id || '').toLowerCase().includes(q) ||
+        (sig.energy_source || '').toLowerCase().includes(q) ||
+        (sig.barrier_status || '').toLowerCase().includes(q)
+      );
+    })
+    .slice(0, 6);
+
+
+  // Interactive Submit Report Card State
+  const [quickCategory, setQuickCategory] = useState('Near Miss');
+  const [quickUnit, setQuickUnit] = useState('Unit 1');
+  const [quickText, setQuickText] = useState('');
+  const [isQuickSubmitting, setIsQuickSubmitting] = useState(false);
+  const [quickSubmitted, setQuickSubmitted] = useState(false);
+
+  const quickCategories = [
+    {
+      id: 'Near Miss',
+      title: 'Near Miss',
+      sub: 'High-energy release',
+      icon: Zap,
+      iconColor: 'text-[#FF5A36]',
+      iconBg: 'bg-orange-100/80',
+      energy: 'Gravity / High Kinetic Energy',
+      conf: '96.2%'
+    },
+    {
+      id: 'Unsafe Act',
+      title: 'Unsafe Act',
+      sub: 'LOTO / PPE bypass',
+      icon: AlertTriangle,
+      iconColor: 'text-amber-600',
+      iconBg: 'bg-amber-100/80',
+      energy: 'Electrical / Arc Flash Vector',
+      conf: '93.5%'
+    },
+    {
+      id: 'Hazard Condition',
+      title: 'Hazard Condition',
+      sub: 'Degraded barriers',
+      icon: ShieldAlert,
+      iconColor: 'text-rose-600',
+      iconBg: 'bg-rose-100/80',
+      energy: 'Pressure / Flange Leak Vector',
+      conf: '94.8%'
+    },
+    {
+      id: 'Barrier Defect',
+      title: 'Barrier Defect',
+      sub: 'Equipment anomalies',
+      icon: ShieldCheck,
+      iconColor: 'text-emerald-600',
+      iconBg: 'bg-emerald-100/80',
+      energy: 'Mechanical / Rigging Degradation',
+      conf: '91.4%'
     }
+  ];
+
+  const activeQuickMeta = quickCategories.find(c => c.id === quickCategory) || quickCategories[0];
+
+  const handleQuickSubmit = (e) => {
+    e?.preventDefault();
+    setIsQuickSubmitting(true);
+    setTimeout(() => {
+      setIsQuickSubmitting(false);
+      setQuickSubmitted(true);
+      setTimeout(() => {
+        setQuickSubmitted(false);
+        setQuickText('');
+        handleNav('/ai-analysis');
+      }, 900);
+    }, 800);
   };
 
-  // 5 Real Database Reports for Today (Oil India Limited - Sept 6, 2026)
-  const defaultTodayReports = [
-    {
-      id: 1,
-      report_reference: "REP-ID001-0001",
-      report_type: "Near-Miss",
-      raw_type: "NEAR_MISS",
-      description: "During crane hoisting operation at Rig 04 Derrick Floor, a 4-inch heavy steel drilling flange slipped from the rigging sling at a height of 18 meters and fell 2 meters away from two roughnecks positioning casing pipe. No exclusion zone barricade was established around the drop zone.",
-      location: "Drilling Rig 04 – Derrick Floor Area",
-      report_date: "2026-09-06",
-      sif_precursor_assessment: "YES",
-      identified_hazard: "Suspended Load & Dropped Object Hazard (Gravity / High Energy)",
-      energy_source: "Gravity (18m elevation drop potential energy)",
-      barrier_status: "BARRIER_FAILED",
-      recommended_action: "Erect physical drop-zone exclusion barricade and re-certify rigging slings."
-    },
-    {
-      id: 2,
-      report_reference: "REP-ID001-0002",
-      report_type: "Unsafe Act",
-      raw_type: "UNSAFE_ACT",
-      description: "Maintenance technician observed entering high-voltage 11kV electrical substation switchgear room to perform circuit breaker inspection without conducting Lock-Out/Tag-Out (LOTO) energy isolation or verifying zero-energy state with a calibrated voltage detector.",
-      location: "Central Processing Facility – Main Substation A",
-      report_date: "2026-09-06",
-      sif_precursor_assessment: "YES",
-      identified_hazard: "Electrical Arc Flash & Shock Hazard (Electrical Energy)",
-      energy_source: "Electrical Energy (11kV Live Switchgear)",
-      barrier_status: "BARRIER_MISSING",
-      recommended_action: "Immediate stop-work; enforce strict Lock-Out/Tag-Out (LOTO) and zero-energy verification."
-    },
-    {
-      id: 3,
-      report_reference: "REP-ID001-0003",
-      report_type: "Unsafe Condition",
-      raw_type: "UNSAFE_CONDITION",
-      description: "Missing grating section (approx 1.5m x 0.8m) on high elevation walkway (Level 3 process platform) above hydrocarbon separation vessel. Open void was left completely unbarricaded and without caution signage.",
-      location: "Hydrocarbon Separation Unit – Level 3 Walkway",
-      report_date: "2026-09-06",
-      sif_precursor_assessment: "YES",
-      identified_hazard: "Working at Heights & Open Void Fall Hazard (Gravity)",
-      energy_source: "Gravity (Fall from >6 meters elevation)",
-      barrier_status: "BARRIER_MISSING",
-      recommended_action: "Install certified rigid scaffolding covers and red physical barrier tape immediately."
-    },
-    {
-      id: 4,
-      report_reference: "REP-ID001-0004",
-      report_type: "Unsafe Condition",
-      raw_type: "UNSAFE_CONDITION",
-      description: "Slow acid drum flange drip with minor seal corrosion inside secondary chemical containment bay. Acid absorbent pads deployed and drum valve closed. Containment bund 100% intact.",
-      location: "Chemical Storage & Handling Bay 2",
-      report_date: "2026-09-06",
-      sif_precursor_assessment: "NO",
-      identified_hazard: "Chemical Containment Drip (Low Energy)",
-      energy_source: "Chemical (Contained Secondary Bund)",
-      barrier_status: "BARRIER_EFFECTIVE",
-      recommended_action: "Replace flange gasket during scheduled maintenance shift; bund barrier intact."
-    },
-    {
-      id: 5,
-      report_reference: "REP-ID001-0005",
-      report_type: "Unsafe Act",
-      raw_type: "UNSAFE_ACT",
-      description: "Heavy forklift operator observed reversing at speed through warehouse receiving corridor without sounding horn or using pedestrian spotter at the blind corner intersection.",
-      location: "Central Warehouse – Receiving Corridor",
-      report_date: "2026-09-06",
-      sif_precursor_assessment: "YES",
-      identified_hazard: "Mobile Equipment & Vehicle-Pedestrian Interaction (Kinetic Energy)",
-      energy_source: "Kinetic Energy (Heavy moving machinery)",
-      barrier_status: "BARRIER_BYPASSED",
-      recommended_action: "Install parabolic convex corner mirrors and strictly enforce 5 km/h warehouse limit."
+  const handleNav = (path) => {
+    if (onNavigate) onNavigate(path);
+  };
+
+  const handleBarClick = (entry) => {
+    const cat = entry?.shortName || entry?.category;
+    if (!cat) return;
+    setActiveClassification(null);
+    setActiveHazard(prev => prev === cat ? null : cat);
+  };
+
+  const handleClassificationClick = (name) => {
+    if (!name) return;
+    setActiveHazard(null);
+    setActiveClassification(prev => prev === name ? null : name);
+  };
+
+  const clearFilters = () => {
+    setActiveHazard(null);
+    setActiveClassification(null);
+  };
+
+  // Helper categorizers for dynamic hazard mapping from uploaded reports
+  const categorizeHazard = (text) => {
+    const t = (text || '').toLowerCase();
+    if (t.includes('gas') || t.includes('explosion') || t.includes('flange') || t.includes('blowout') || t.includes('pressure') || t.includes('lpg')) return 'Pressure & Flammable Gas';
+    if (t.includes('crane') || t.includes('rigging') || t.includes('load') || t.includes('hoist') || t.includes('casing') || t.includes('sling')) return 'Lifting Operations & Rigging';
+    if (t.includes('electric') || t.includes('loto') || t.includes('substation') || t.includes('switchboard') || t.includes('arc flash') || t.includes('grounding')) return 'Electrical Energy & LOTO';
+    if (t.includes('fall') || t.includes('height') || t.includes('scaffold') || t.includes('ladder')) return 'Working at Height';
+    if (t.includes('weld') || t.includes('hot work') || t.includes('fire') || t.includes('spark') || t.includes('thermal') || t.includes('steam')) return 'Hot Work & Thermal Fire';
+    if (t.includes('confined') || t.includes('toxic') || t.includes('h2s') || t.includes('asphyxiation') || t.includes('chemical') || t.includes('acid')) return 'Toxic & Confined Space';
+    if (t.includes('pulley') || t.includes('pinch') || t.includes('machinery') || t.includes('grating') || t.includes('hydraulic') || t.includes('mechanical')) return 'Mechanical & Process Safety';
+    return 'General Operational Safety';
+  };
+
+  const getShortCategory = (cat) => {
+    if (cat.includes('Pressure') || cat.includes('Gas')) return 'Pressure';
+    if (cat.includes('Lifting')) return 'Lifting';
+    if (cat.includes('Electrical')) return 'Electrical';
+    if (cat.includes('Height')) return 'Height';
+    if (cat.includes('Hot Work') || cat.includes('Fire')) return 'Hot Work';
+    if (cat.includes('Toxic') || cat.includes('Confined')) return 'Confined';
+    if (cat.includes('Mechanical')) return 'Mechanical';
+    return 'General';
+  };
+
+  // Unified active reports: strictly 0 if backend reports 0 or store reports are wiped
+  const activeReports = React.useMemo(() => {
+    if (backendMetrics && backendMetrics.total_reports === 0) {
+      return [];
     }
-  ];
+    if (storeState.isWiped) {
+      return [];
+    }
+    return storeState.reports || [];
+  }, [backendMetrics, storeState.isWiped, storeState.reports]);
 
-  const allReportsToday = (dashboardData?.recent_reports && dashboardData.recent_reports.length > 0)
-    ? dashboardData.recent_reports
-    : defaultTodayReports;
-
-  const totalReports = allReportsToday.length;
-  const sifCount = allReportsToday.filter(r => r.sif_precursor_assessment === 'YES').length;
-  const nonSifCount = Math.max(0, totalReports - sifCount);
-
-  const sifPct = totalReports > 0 ? ((sifCount / totalReports) * 100).toFixed(0) : '0';
-  const nonSifPct = totalReports > 0 ? ((nonSifCount / totalReports) * 100).toFixed(0) : '0';
-
-  // Event category counts
-  const unsafeActsCount = allReportsToday.filter(r => r.raw_type === 'UNSAFE_ACT').length;
-  const unsafeConditionsCount = allReportsToday.filter(r => r.raw_type === 'UNSAFE_CONDITION').length;
-  const nearMissCount = allReportsToday.filter(r => r.raw_type === 'NEAR_MISS').length;
-
-  // Filter and Search Logic
-  const filteredReports = useMemo(() => {
-    return allReportsToday.filter(report => {
-      // Filter tab check
-      if (selectedFilter === 'SIF' && report.sif_precursor_assessment !== 'YES') return false;
-      if (selectedFilter === 'NON_SIF' && report.sif_precursor_assessment !== 'NO') return false;
-      if (selectedFilter === 'UNSAFE_ACT' && report.raw_type !== 'UNSAFE_ACT') return false;
-      if (selectedFilter === 'UNSAFE_CONDITION' && report.raw_type !== 'UNSAFE_CONDITION') return false;
-      if (selectedFilter === 'NEAR_MISS' && report.raw_type !== 'NEAR_MISS') return false;
-
-      // Search query check
-      if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase();
-        const refMatch = report.report_reference?.toLowerCase().includes(query);
-        const descMatch = report.description?.toLowerCase().includes(query);
-        const locMatch = report.location?.toLowerCase().includes(query);
-        const hazardMatch = report.identified_hazard?.toLowerCase().includes(query);
-        const energyMatch = report.energy_source?.toLowerCase().includes(query);
-        const typeMatch = report.report_type?.toLowerCase().includes(query);
-        return refMatch || descMatch || locMatch || hazardMatch || energyMatch || typeMatch;
+  // 1. Hazard Categories Breakdown Data (Dynamically aggregated from uploaded records)
+  const hazardCategoryData = React.useMemo(() => {
+    const reports = activeReports;
+    if (reports.length === 0) return [];
+    
+    const catMap = {};
+    reports.forEach((r) => {
+      const fullCat = categorizeHazard(r.identified_hazard || r.description);
+      const shortName = getShortCategory(fullCat);
+      if (!catMap[fullCat]) {
+        catMap[fullCat] = {
+          category: fullCat,
+          shortName: shortName,
+          sifHigh: 0,
+          nonSif: 0,
+          total: 0,
+          description: r.identified_hazard || r.description
+        };
       }
-
-      return true;
+      const isSIF = r.sif_precursor_assessment === 'YES' || r.risk_level === 'Critical' || (r.ai_score && r.ai_score >= 80);
+      if (isSIF) {
+        catMap[fullCat].sifHigh += 1;
+      } else {
+        catMap[fullCat].nonSif += 1;
+      }
+      catMap[fullCat].total += 1;
     });
-  }, [allReportsToday, selectedFilter, searchQuery]);
 
-  // 5 Safety Symbols definition
-  const safetySymbols = [
-    {
-      id: 'sif_alert',
-      name: 'SIF Precursor Alert',
-      count: 4,
-      desc: 'High fatality potential',
-      gradient: 'from-amber-500 to-rose-500',
-      icon: AlertTriangle,
-      filter: 'SIF',
-      accentColor: 'text-amber-600',
-      tag: 'Critical Risk'
-    },
-    {
-      id: 'high_energy',
-      name: 'High Energy Vector',
-      count: 4,
-      desc: 'Gravity, 11kV, Kinetic',
-      gradient: 'from-orange-500 to-amber-600',
-      icon: Zap,
-      filter: 'SIF',
-      accentColor: 'text-orange-600',
-      tag: 'Release Vector'
-    },
-    {
-      id: 'barrier_defense',
-      name: 'Critical Barrier Defense',
-      count: 3,
-      desc: 'Failed, Missing, Bypassed',
-      gradient: 'from-blue-600 to-indigo-600',
-      icon: Shield,
-      filter: 'ALL',
-      accentColor: 'text-blue-600',
-      tag: 'Integrity Audit'
-    },
-    {
-      id: 'field_exposure',
-      name: 'Field Observations',
-      count: 5,
-      desc: '2 Acts, 2 Conditions, 1 Near-Miss',
-      gradient: 'from-purple-600 to-pink-600',
-      icon: Eye,
-      filter: 'ALL',
-      accentColor: 'text-purple-600',
-      tag: 'Verified Field Data'
-    },
-    {
-      id: 'life_saving_rules',
-      name: 'Life-Saving Rules',
-      count: 3,
-      desc: 'Drop Zone, LOTO, Heights',
-      gradient: 'from-emerald-500 to-teal-600',
-      icon: FileCheck,
-      filter: 'SIF',
-      accentColor: 'text-emerald-600',
-      tag: 'Mandatory Compliance'
+    return Object.values(catMap).sort((a, b) => b.total - a.total);
+  }, [activeReports]);
+
+  // Max count for BarChart YAxis
+  const maxHazardCount = React.useMemo(() => {
+    if (hazardCategoryData.length === 0) return 4;
+    return Math.max(4, ...hazardCategoryData.map(h => h.total || 0));
+  }, [hazardCategoryData]);
+
+  // 2. SIF vs Non-SIF vs Near Misses Donut Chart Data (Reflecting active safety reports)
+  const classificationDistributionData = React.useMemo(() => {
+    const reports = activeReports;
+    const total = reports.length || 1;
+    const sifCount = reports.filter(r => r.sif_precursor_assessment === 'YES' || r.risk_level === 'Critical' || (r.ai_score && r.ai_score >= 80)).length;
+    const nearMissCount = reports.filter(r => (r.report_type || '').toLowerCase().includes('near miss')).length;
+    const nonSifCount = Math.max(0, reports.length - sifCount);
+
+    return [
+      { 
+        name: 'SIF Precursors', 
+        value: reports.length > 0 ? Math.round((sifCount / total) * 100) : 0, 
+        count: sifCount, 
+        color: '#FF5A36',
+        description: 'High-severity critical precursors'
+      },
+      { 
+        name: 'Non-SIF / Weak Signals', 
+        value: reports.length > 0 ? Math.round((nonSifCount / total) * 100) : 0, 
+        count: nonSifCount, 
+        color: '#10B981',
+        description: 'Routine observations & weak signals'
+      },
+      { 
+        name: 'Near Misses', 
+        value: reports.length > 0 ? Math.round((nearMissCount / total) * 100) : 0, 
+        count: nearMissCount, 
+        color: '#8B5CF6',
+        description: 'Immediate near-miss incidents'
+      }
+    ];
+  }, [activeReports]);
+
+  // 3. Safety Reports Table (Dynamically mapped from uploaded safety reports)
+  const summaryReports = React.useMemo(() => {
+    const reports = activeReports;
+    return reports.map((r, idx) => {
+      const fullCat = categorizeHazard(r.identified_hazard || r.description);
+      const isSIF = r.sif_precursor_assessment === 'YES' || r.risk_level === 'Critical' || (r.ai_score && r.ai_score >= 80);
+      const isNearMiss = (r.report_type || '').toLowerCase().includes('near miss');
+      return {
+        id: r.report_reference || `REP-ID001-${String(idx + 1).padStart(4, '0')}`,
+        type: r.report_type || 'Near Miss',
+        hazardCategory: getShortCategory(fullCat),
+        classification: isSIF ? 'SIF Precursors' : (isNearMiss ? 'Near Misses' : 'Non-SIF / Weak Signals'),
+        location: r.location || r.facility_unit || 'Unit 1',
+        risk: isSIF ? 'Critical' : 'Low',
+        score: r.ai_score || (isSIF ? 92 : 45),
+        status: r.status || 'Under Review',
+        date: r.report_date || getTodayDateString(),
+        description: r.description || ''
+      };
+    });
+  }, [activeReports]);
+
+  // Dynamic filter computed based on active chart interaction
+  const filteredReports = summaryReports.filter(rep => {
+    if (activeHazard) return rep.hazardCategory === activeHazard;
+    if (activeClassification) return rep.classification === activeClassification;
+    return true;
+  });
+
+  // Custom Dark Tooltip for Hazard Categories Bar Chart
+  const CustomHazardTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      const data = payload[0]?.payload;
+      return (
+        <div className="bg-[#0F172A] text-white border border-slate-700/80 p-3 rounded-xl shadow-2xl text-xs space-y-1.5 min-w-[210px]">
+          <div className="font-bold text-slate-200 border-b border-slate-800 pb-1.5 flex items-center justify-between">
+            <span>{data?.category || label}</span>
+            <span className="text-[#FF5A36] font-mono text-[11px] font-bold">{data?.total} {data?.total === 1 ? 'Incident' : 'Incidents'}</span>
+          </div>
+          {data?.sifHigh > 0 && (
+            <div className="flex items-center justify-between text-rose-400">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-[#FF5A36]" />
+                SIF Precursor (High)
+              </span>
+              <strong className="text-white font-mono">{data.sifHigh}</strong>
+            </div>
+          )}
+          {data?.nonSif > 0 && (
+            <div className="flex items-center justify-between text-emerald-400">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-[#10B981]" />
+                Non-SIF / Weak Signal
+              </span>
+              <strong className="text-white font-mono">{data.nonSif}</strong>
+            </div>
+          )}
+          <p className="text-[10px] text-slate-400 pt-1.5 border-t border-slate-800/60 leading-relaxed italic">
+            {data?.description}
+          </p>
+        </div>
+      );
     }
+    return null;
+  };
+
+  // Unit Selector Options for Day-Wise Trend Analysis
+  const siteOptions = [
+    { id: 'ALL', name: 'All Units', location: 'Enterprise-wide' },
+    { id: 'PLANT_01', name: 'Unit 1', location: 'Unit 1' },
+    { id: 'PLANT_02', name: 'Unit 2', location: 'Unit 2' },
+    { id: 'PLANT_03', name: 'Unit 3', location: 'Unit 3' },
+    { id: 'PLANT_04', name: 'Unit 4', location: 'Unit 4' }
   ];
 
-  if (loading) {
-    return (
-      <div className="w-full max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 py-32 flex flex-col items-center justify-center space-y-4 select-none">
-        <div className="w-14 h-14 border-4 border-blue-500/30 border-t-blue-600 rounded-full animate-spin shadow-lg" />
-        <p className="text-lg text-slate-800 font-bold tracking-tight">Syncing Real-Time Safety Intelligence...</p>
-        <p className="text-xs text-slate-500 font-mono">Oil India Limited • Safety Intelligence Engine</p>
-      </div>
-    );
-  }
+  // 4. Day-Wise Incident & SIF Precursor Trajectory Across the 4 Sites (Dynamically rolling daily through today)
+  const siteDayWiseData = React.useMemo(() => {
+    const reports = activeReports;
+    const today = currentTodayDate || getTodayDateString();
+
+    const formatDate = (isoStr) => {
+      try {
+        const parts = isoStr.split('-');
+        if (parts.length === 3) {
+          const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+          const mIdx = parseInt(parts[1], 10) - 1;
+          return `${parseInt(parts[2], 10)} ${monthNames[mIdx] || 'Sep'}`;
+        }
+      } catch (e) {}
+      return isoStr;
+    };
+
+    const getUnitCount = (list, unitNum) => {
+      return list.filter(r => {
+        const loc = `${r.location || ''} ${r.facility_unit || ''}`.toLowerCase();
+        return (
+          loc.includes(`unit ${unitNum}`) ||
+          loc.includes(`unit0${unitNum}`) ||
+          loc.includes(`unit-${unitNum}`) ||
+          loc.includes(`plant 0${unitNum}`) ||
+          loc.includes(`plant ${unitNum}`)
+        );
+      }).length;
+    };
+
+    if (reports.length === 0) return [];
+
+    // Extract all valid report dates
+    const reportDates = reports
+      .map(r => (r.report_date || r.created_at || '').slice(0, 10))
+      .filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d));
+
+    const sortedReportDates = [...new Set(reportDates)].sort();
+    const earliestDateStr = sortedReportDates.length > 0 ? sortedReportDates[0] : today;
+
+    // Generate consecutive rolling date list ending at today (or rolling window)
+    const consecutiveDates = [];
+    const startObj = new Date(earliestDateStr + 'T00:00:00');
+    const todayObj = new Date(today + 'T00:00:00');
+
+    if (!isNaN(startObj.getTime()) && !isNaN(todayObj.getTime()) && startObj <= todayObj) {
+      const curr = new Date(startObj);
+      while (curr <= todayObj) {
+        const y = curr.getFullYear();
+        const m = String(curr.getMonth() + 1).padStart(2, '0');
+        const d = String(curr.getDate()).padStart(2, '0');
+        consecutiveDates.push(`${y}-${m}-${d}`);
+        curr.setDate(curr.getDate() + 1);
+      }
+    } else {
+      consecutiveDates.push(today);
+    }
+
+    // Keep the rolling last 7 days ending at today
+    const displayDates = consecutiveDates.slice(-7);
+
+    return displayDates.map(dStr => {
+      const dReports = reports.filter(r => {
+        const rDate = (r.report_date || r.created_at || '').slice(0, 10);
+        return rDate === dStr;
+      });
+
+      return {
+        day: formatDate(dStr),
+        fullDate: dStr,
+        isToday: dStr === today,
+        plant01: getUnitCount(dReports, 1),
+        plant02: getUnitCount(dReports, 2),
+        plant03: getUnitCount(dReports, 3),
+        plant04: getUnitCount(dReports, 4),
+      };
+    });
+  }, [activeReports, currentTodayDate]);
+
+  // Max count for LineChart YAxis
+  const maxTrajectoryCount = React.useMemo(() => {
+    if (!siteDayWiseData || siteDayWiseData.length === 0) return 5;
+    const maxVal = Math.max(5, ...siteDayWiseData.flatMap(d => [d.plant01 || 0, d.plant02 || 0, d.plant03 || 0, d.plant04 || 0]));
+    return maxVal + 1;
+  }, [siteDayWiseData]);
+
+
+  // Custom Dark Tooltip for Multi-Line Spline Trajectory Chart (4 Units)
+  const CustomTrajectoryTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      const isTodayPoint = payload[0]?.payload?.isToday;
+      return (
+        <div className="bg-[#0F172A] text-white border border-slate-700/80 p-3 rounded-xl shadow-2xl text-xs space-y-2 min-w-[230px]">
+          <div className="font-bold text-slate-200 border-b border-slate-800 pb-1.5 flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <span className="font-mono text-[#FF5A36] font-bold">{label}</span>
+              {isTodayPoint && (
+                <span className="text-[9px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 rounded font-mono font-bold">
+                  TODAY
+                </span>
+              )}
+            </div>
+            <span className="text-[10px] text-slate-400 font-mono">4 Monitored Units</span>
+          </div>
+          <div className="space-y-1.5">
+            {payload.map((entry, idx) => (
+              <div key={idx} className="flex items-center justify-between text-xs">
+                <span className="flex items-center gap-1.5" style={{ color: entry.color }}>
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
+                  <span>{entry.name}</span>
+                </span>
+                <strong className="text-white font-mono">{entry.value} Incidents</strong>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
+
+
 
   return (
-    <div className="w-full max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-8 select-none">
-      
-      {/* ==================================================================== */}
-      {/* 1. SAFETY SYMBOLS ROW (Revealed when clicking arrow on Dashboard)    */}
-      {/* ==================================================================== */}
-      {showSymbols && (
-        <div className="p-6 rounded-3xl bg-white/80 backdrop-blur-2xl border border-blue-200/70 shadow-[0_12px_40px_-10px_rgba(37,99,235,0.08)] transition-all duration-300 animate-in fade-in slide-in-from-top-4">
-          <div className="flex items-center justify-between mb-5 pb-3 border-b border-slate-100/80">
-            <div className="flex items-center gap-3">
-              <span className="w-3 h-3 rounded-full bg-blue-600 animate-pulse shadow-sm shadow-blue-500/50" />
-              <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight font-heading">
-                Industrial Safety Intelligence Symbols (5 Active Today)
-              </h2>
-              <span className="hidden sm:inline-flex text-xs text-slate-500 font-medium">
-                • Click any symbol to filter safety intelligence reports
-              </span>
-            </div>
-            <button
-              onClick={() => setShowSymbols(false)}
-              className="text-xs text-slate-400 hover:text-slate-800 font-bold px-3 py-1.5 rounded-xl hover:bg-slate-100/80 transition-colors cursor-pointer"
-            >
-              Hide Symbols ✕
-            </button>
-          </div>
+    <div className="p-4 sm:p-5 lg:p-6 space-y-4 max-w-[1680px] mx-auto text-slate-800 animate-in fade-in duration-200 select-none">
 
-          {/* 5 Glassmorphic Symbol Tiles */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-            {safetySymbols.map((sym) => {
-              const Icon = sym.icon;
-              const isSelected = selectedFilter === sym.filter && selectedFilter !== 'ALL';
-
-              return (
-                <button
-                  key={sym.id}
-                  onClick={() => setSelectedFilter(selectedFilter === sym.filter ? 'ALL' : sym.filter)}
-                  className={`p-4 rounded-2xl border transition-all duration-200 text-left flex items-start gap-3.5 cursor-pointer group relative overflow-hidden ${
-                    isSelected
-                      ? 'bg-blue-50/90 border-blue-500/80 shadow-md ring-2 ring-blue-500/20 scale-[1.02]'
-                      : 'bg-white/70 hover:bg-white border-slate-200/80 hover:border-slate-300 shadow-xs hover:shadow-md hover:scale-[1.01]'
-                  }`}
-                >
-                  <div className={`w-12 h-12 rounded-2xl bg-gradient-to-tr ${sym.gradient} text-white flex items-center justify-center shrink-0 shadow-md shadow-slate-300/40 group-hover:scale-110 transition-transform`}>
-                    <Icon className="w-6 h-6 stroke-[2.2]" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-1">
-                      <span className="text-xs font-black text-slate-900 truncate">
-                        {sym.name}
-                      </span>
-                      <span className="text-xs font-mono font-black px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-800 border border-slate-200/80 shrink-0">
-                        {sym.count}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-500 font-medium truncate mt-1">
-                      {sym.desc}
-                    </p>
-                    <span className="inline-block mt-2 text-[10px] font-mono font-bold text-slate-400 bg-slate-50 px-2 py-0.5 rounded border border-slate-200/60">
-                      {sym.tag}
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* ==================================================================== */}
-      {/* 2. THREE KEY METRIC CARDS (Frosted Glass UI with Rich Readability)   */}
-      {/* ==================================================================== */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* ================= 1. REFINERY HERO BANNER (IMAGE REPLACES VIDEO) ================= */}
+      <section className="relative overflow-hidden rounded-2xl bg-[#081B38] border border-slate-700/60 shadow-md min-h-[220px] lg:min-h-[260px] flex items-center justify-between">
         
-        {/* Card 1: Total Reports Today */}
-        <div 
-          onClick={() => setSelectedFilter('ALL')}
-          className={`p-6 sm:p-7 rounded-3xl bg-white/80 backdrop-blur-2xl border border-white/90 shadow-[0_8px_30px_rgb(0,0,0,0.04)] transition-all duration-200 cursor-pointer hover:shadow-xl hover:scale-[1.01] group ${
-            selectedFilter === 'ALL' ? 'ring-2 ring-blue-500/40 border-blue-200' : ''
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-black uppercase tracking-wider text-slate-500 font-sans">
-              Total Reports Today
-            </span>
-            <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100/80 group-hover:scale-110 transition-transform shadow-2xs">
-              <FileText className="w-5 h-5 stroke-[2.2]" />
-            </div>
-          </div>
-          
-          <div className="mt-4 flex items-baseline gap-3">
-            <span className="text-5xl font-black text-slate-900 font-mono tracking-tight">
-              {totalReports}
-            </span>
-            <span className="text-xs font-mono font-extrabold text-blue-700 bg-blue-50/90 px-3 py-1 rounded-full border border-blue-200 shadow-2xs">
-              Sept 6, 2026
-            </span>
-          </div>
-
-          <div className="mt-3.5 flex items-center gap-2 text-xs font-semibold text-slate-600">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>100% processed by AI safety intelligence engine</span>
-          </div>
-
-          <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400 font-mono">
-            <span>Oil India Limited</span>
-            <span className="text-blue-600 font-bold group-hover:underline">View All →</span>
-          </div>
+        {/* BACKGROUND IMAGE: Sunset Industrial Refinery (Replaces Video) */}
+        <div className="absolute inset-0 pointer-events-none select-none overflow-hidden">
+          <img
+            src="/refinery-banner.png"
+            alt="PetroSafe Refinery at Sunset"
+            className="w-full h-full object-cover object-right"
+          />
+          {/* Deep Navy to Transparent Gradient Overlay on Left Half */}
+          <div className="absolute inset-0 bg-gradient-to-r from-[#071930] via-[#0A2446]/95 via-48% to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#071930]/60 via-transparent to-[#071930]/30" />
         </div>
 
-        {/* Card 2: Potential SIF Precursors */}
-        <div 
-          onClick={() => setSelectedFilter(selectedFilter === 'SIF' ? 'ALL' : 'SIF')}
-          className={`p-6 sm:p-7 rounded-3xl bg-white/80 backdrop-blur-2xl border border-amber-200/80 shadow-[0_8px_30px_rgb(0,0,0,0.04)] transition-all duration-200 cursor-pointer hover:shadow-xl hover:scale-[1.01] group ${
-            selectedFilter === 'SIF' ? 'ring-2 ring-amber-500/50 bg-amber-50/40' : ''
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-black uppercase tracking-wider text-amber-700 font-sans">
-              Potential SIF Precursors
-            </span>
-            <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-200 group-hover:scale-110 transition-transform shadow-2xs">
-              <AlertTriangle className="w-5 h-5 stroke-[2.5]" />
-            </div>
+        {/* LEFT HALF: Safety Intelligence Content & Interactive Actions */}
+        <div className="relative z-10 w-full lg:w-3/5 p-6 sm:p-8 lg:p-10 flex flex-col justify-center space-y-3 max-w-2xl">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/15 border border-cyan-400/30 text-cyan-300 text-[11px] font-bold tracking-wider uppercase w-fit">
+            <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
+            <span>SAFETY INTELLIGENCE</span>
           </div>
 
-          <div className="mt-4 flex items-baseline gap-3">
-            <span className="text-5xl font-black text-amber-600 font-mono tracking-tight">
-              {sifCount}
-            </span>
-            <span className="text-xs font-mono font-extrabold text-amber-800 bg-amber-100/90 px-3 py-1 rounded-full border border-amber-300 shadow-2xs">
-              {sifPct}% High Energy
-            </span>
-          </div>
+          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black font-heading text-white tracking-tight leading-[1.18]">
+            Detect Risk Before It Becomes an <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 via-[#FF5A36] to-amber-400">Incident</span>
+          </h2>
 
-          <div className="mt-3.5 flex items-center gap-2 text-xs font-semibold text-slate-700">
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
-            <span>Critical fatality risk: drop zone, arc flash, open void, forklift</span>
-          </div>
+          <p className="text-xs sm:text-sm text-slate-300 leading-relaxed max-w-xl">
+            AI analysis has identified recurring safety signals in the maintenance area. Focus on electrical hazards and control failures.
+          </p>
 
-          <div className="mt-4 pt-3 border-t border-amber-100/80 flex items-center justify-between text-xs text-amber-700 font-mono">
-            <span>4 High-Energy Vectors</span>
-            <span className="font-bold group-hover:underline">Filter SIF →</span>
-          </div>
-        </div>
-
-        {/* Card 3: Non-SIF Observations */}
-        <div 
-          onClick={() => setSelectedFilter(selectedFilter === 'NON_SIF' ? 'ALL' : 'NON_SIF')}
-          className={`p-6 sm:p-7 rounded-3xl bg-white/80 backdrop-blur-2xl border border-emerald-200/80 shadow-[0_8px_30px_rgb(0,0,0,0.04)] transition-all duration-200 cursor-pointer hover:shadow-xl hover:scale-[1.01] group ${
-            selectedFilter === 'NON_SIF' ? 'ring-2 ring-emerald-500/50 bg-emerald-50/40' : ''
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-black uppercase tracking-wider text-emerald-700 font-sans">
-              Non-SIF Observations
-            </span>
-            <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-200 group-hover:scale-110 transition-transform shadow-2xs">
-              <CheckCircle className="w-5 h-5 stroke-[2.2]" />
-            </div>
-          </div>
-
-          <div className="mt-4 flex items-baseline gap-3">
-            <span className="text-5xl font-black text-emerald-600 font-mono tracking-tight">
-              {nonSifCount}
-            </span>
-            <span className="text-xs font-mono font-extrabold text-emerald-800 bg-emerald-100/90 px-3 py-1 rounded-full border border-emerald-300 shadow-2xs">
-              {nonSifPct}% Contained
-            </span>
-          </div>
-
-          <div className="mt-3.5 flex items-center gap-2 text-xs font-semibold text-slate-700">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>Chemical drum drip; secondary containment bund 100% intact</span>
-          </div>
-
-          <div className="mt-4 pt-3 border-t border-emerald-100/80 flex items-center justify-between text-xs text-emerald-700 font-mono">
-            <span>Effective Barrier In Place</span>
-            <span className="font-bold group-hover:underline">Filter Safe →</span>
-          </div>
-        </div>
-
-      </div>
-
-      {/* ==================================================================== */}
-      {/* 3. TWO FULL INTERACTIVE CHARTS (Side-by-Side Bento Box)              */}
-      {/* Left: Interactive SIF Donut Chart | Right: Horizontal Bar Chart      */}
-      {/* ==================================================================== */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
-        {/* Left Chart: SIF vs Non-SIF Precursor Distribution */}
-        <div className="p-6 sm:p-8 rounded-3xl bg-white/80 backdrop-blur-2xl border border-white/90 shadow-[0_8px_30px_rgb(0,0,0,0.04)] flex flex-col justify-between space-y-6">
-          <div>
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div>
-                <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight font-heading">
-                  SIF vs Non-SIF Precursor Distribution
-                </h3>
-                <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1">
-                  Dynamic visual breakdown of today's 5 reports (Sept 6, 2026)
-                </p>
-              </div>
-              <span className="text-xs font-mono font-black bg-slate-100 text-slate-800 px-3 py-1 rounded-xl border border-slate-200/80 shadow-2xs">
-                5 Reports Verified
-              </span>
-            </div>
-          </div>
-
-          {/* Interactive Donut Visualization */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-8 py-2">
-            
-            {/* SVG Donut Circle */}
-            <div className="relative shrink-0 w-64 h-64 sm:w-72 sm:h-72">
-              <svg viewBox="0 0 280 280" className="w-full h-full transform -rotate-90 drop-shadow-md">
-                {/* Background Ring */}
-                <circle
-                  cx="140"
-                  cy="140"
-                  r="95"
-                  fill="transparent"
-                  stroke="#F1F5F9"
-                  strokeWidth="32"
-                />
-
-                {/* SIF Slice (4/5 = 80%) */}
-                <circle
-                  cx="140"
-                  cy="140"
-                  r="95"
-                  fill="transparent"
-                  stroke="#F59E0B"
-                  strokeWidth={hoveredSlice === 'SIF' ? 42 : 32}
-                  strokeDasharray={`${(4 / 5) * 596.9} 596.9`}
-                  strokeDashoffset="0"
-                  strokeLinecap="round"
-                  className="transition-all duration-300 cursor-pointer hover:stroke-amber-500"
-                  onMouseEnter={() => setHoveredSlice('SIF')}
-                  onMouseLeave={() => setHoveredSlice(null)}
-                  onClick={() => setSelectedFilter(selectedFilter === 'SIF' ? 'ALL' : 'SIF')}
-                />
-
-                {/* Non-SIF Slice (1/5 = 20%) */}
-                <circle
-                  cx="140"
-                  cy="140"
-                  r="95"
-                  fill="transparent"
-                  stroke="#10B981"
-                  strokeWidth={hoveredSlice === 'NON_SIF' ? 42 : 32}
-                  strokeDasharray={`${(1 / 5) * 596.9} 596.9`}
-                  strokeDashoffset={`-${(4 / 5) * 596.9}`}
-                  strokeLinecap="round"
-                  className="transition-all duration-300 cursor-pointer hover:stroke-emerald-600"
-                  onMouseEnter={() => setHoveredSlice('NON_SIF')}
-                  onMouseLeave={() => setHoveredSlice(null)}
-                  onClick={() => setSelectedFilter(selectedFilter === 'NON_SIF' ? 'ALL' : 'NON_SIF')}
-                />
-              </svg>
-
-              {/* Center Donut Readout */}
-              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <div className="p-4 rounded-full bg-white/95 shadow-lg border border-white flex flex-col items-center justify-center w-36 h-36 backdrop-blur-md">
-                  <span className="text-4xl font-black font-mono text-slate-900 leading-none">
-                    {hoveredSlice === 'SIF' ? '4' : hoveredSlice === 'NON_SIF' ? '1' : '5'}
-                  </span>
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mt-1.5 text-center px-1">
-                    {hoveredSlice === 'SIF' ? 'SIF Precursors' : hoveredSlice === 'NON_SIF' ? 'Non-SIF' : 'Total Reports'}
-                  </span>
-                  <span className={`text-xs font-mono font-extrabold mt-1 px-2 py-0.5 rounded-full ${
-                    hoveredSlice === 'SIF' ? 'bg-amber-100 text-amber-800' : hoveredSlice === 'NON_SIF' ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'
-                  }`}>
-                    {hoveredSlice === 'SIF' ? '80.0%' : hoveredSlice === 'NON_SIF' ? '20.0%' : '100%'}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Interactive Legend Chips */}
-            <div className="space-y-3.5 w-full max-w-xs">
-              {/* SIF Precursor Legend */}
-              <div
-                onMouseEnter={() => setHoveredSlice('SIF')}
-                onMouseLeave={() => setHoveredSlice(null)}
-                onClick={() => setSelectedFilter(selectedFilter === 'SIF' ? 'ALL' : 'SIF')}
-                className={`p-4 rounded-2xl border transition-all duration-200 cursor-pointer flex items-center justify-between gap-3 ${
-                  hoveredSlice === 'SIF' || selectedFilter === 'SIF'
-                    ? 'bg-amber-50/90 border-amber-300 shadow-md scale-[1.02] ring-2 ring-amber-400/20'
-                    : 'bg-white/70 border-slate-200/80 hover:bg-amber-50/50 hover:border-amber-200'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <span className="w-4 h-4 rounded-full bg-amber-500 shadow-sm shrink-0" />
-                  <div>
-                    <div className="text-xs sm:text-sm font-black text-slate-900">Potential SIF Precursor</div>
-                    <div className="text-[11px] text-slate-500 font-medium">Critical fatality potential</div>
-                  </div>
-                </div>
-                <div className="text-right font-mono">
-                  <div className="text-base font-black text-amber-700">4</div>
-                  <div className="text-[11px] text-slate-400 font-semibold">80.0%</div>
-                </div>
-              </div>
-
-              {/* Non-SIF Legend */}
-              <div
-                onMouseEnter={() => setHoveredSlice('NON_SIF')}
-                onMouseLeave={() => setHoveredSlice(null)}
-                onClick={() => setSelectedFilter(selectedFilter === 'NON_SIF' ? 'ALL' : 'NON_SIF')}
-                className={`p-4 rounded-2xl border transition-all duration-200 cursor-pointer flex items-center justify-between gap-3 ${
-                  hoveredSlice === 'NON_SIF' || selectedFilter === 'NON_SIF'
-                    ? 'bg-emerald-50/90 border-emerald-300 shadow-md scale-[1.02] ring-2 ring-emerald-400/20'
-                    : 'bg-white/70 border-slate-200/80 hover:bg-emerald-50/50 hover:border-emerald-200'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <span className="w-4 h-4 rounded-full bg-emerald-500 shadow-sm shrink-0" />
-                  <div>
-                    <div className="text-xs sm:text-sm font-black text-slate-900">Non-SIF Observation</div>
-                    <div className="text-[11px] text-slate-500 font-medium">Contained / low energy</div>
-                  </div>
-                </div>
-                <div className="text-right font-mono">
-                  <div className="text-base font-black text-emerald-700">1</div>
-                  <div className="text-[11px] text-slate-400 font-semibold">20.0%</div>
-                </div>
-              </div>
-            </div>
-
-          </div>
-
-          <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-            <span>💡 Tip: Click slices or legend cards to filter report records below</span>
-            {selectedFilter !== 'ALL' && (
-              <button 
-                onClick={() => setSelectedFilter('ALL')}
-                className="font-bold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
-              >
-                Reset Filter
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Right Chart: Event Type & Hazard Classification */}
-        <div className="p-6 sm:p-8 rounded-3xl bg-white/80 backdrop-blur-2xl border border-white/90 shadow-[0_8px_30px_rgb(0,0,0,0.04)] flex flex-col justify-between space-y-6">
-          <div>
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div>
-                <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight font-heading">
-                  Event Type & Hazard Classification
-                </h3>
-                <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1">
-                  Categorical breakdown across today's 5 verified incidents
-                </p>
-              </div>
-              <span className="text-xs font-mono font-black bg-blue-50 text-blue-700 px-3 py-1 rounded-xl border border-blue-200/90 shadow-2xs">
-                100% Ingested
-              </span>
-            </div>
-          </div>
-
-          {/* Full Interactive Horizontal Bars */}
-          <div className="space-y-4 py-2">
-            
-            {/* 1. Unsafe Act (2 reports / 40%) */}
-            <div 
-              onMouseEnter={() => setHoveredBar('UNSAFE_ACT')}
-              onMouseLeave={() => setHoveredBar(null)}
-              onClick={() => setSelectedFilter(selectedFilter === 'UNSAFE_ACT' ? 'ALL' : 'UNSAFE_ACT')}
-              className={`p-4 rounded-2xl border transition-all duration-200 cursor-pointer ${
-                hoveredBar === 'UNSAFE_ACT' || selectedFilter === 'UNSAFE_ACT'
-                  ? 'bg-blue-50/90 border-blue-300 shadow-sm ring-2 ring-blue-400/20'
-                  : 'bg-white/60 border-slate-200/70 hover:bg-slate-50/90'
-              }`}
-            >
-              <div className="flex items-center justify-between text-xs sm:text-sm font-bold mb-2">
-                <span className="text-slate-900 font-black">Unsafe Act (2 reports)</span>
-                <span className="font-mono text-blue-700 font-extrabold">40.0%</span>
-              </div>
-              <div className="w-full h-4 bg-slate-100/90 rounded-full overflow-hidden p-0.5 border border-slate-200/50">
-                <div 
-                  className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full transition-all duration-500 shadow-xs"
-                  style={{ width: '40%' }}
-                />
-              </div>
-              <div className="mt-2 text-xs text-slate-500 flex items-center justify-between">
-                <span>Electrical arc flash (no LOTO) & Forklift reversing blind corner</span>
-                <span className="font-mono font-bold text-slate-700">2 / 5</span>
-              </div>
-            </div>
-
-            {/* 2. Unsafe Condition (2 reports / 40%) */}
-            <div 
-              onMouseEnter={() => setHoveredBar('UNSAFE_CONDITION')}
-              onMouseLeave={() => setHoveredBar(null)}
-              onClick={() => setSelectedFilter(selectedFilter === 'UNSAFE_CONDITION' ? 'ALL' : 'UNSAFE_CONDITION')}
-              className={`p-4 rounded-2xl border transition-all duration-200 cursor-pointer ${
-                hoveredBar === 'UNSAFE_CONDITION' || selectedFilter === 'UNSAFE_CONDITION'
-                  ? 'bg-amber-50/90 border-amber-300 shadow-sm ring-2 ring-amber-400/20'
-                  : 'bg-white/60 border-slate-200/70 hover:bg-slate-50/90'
-              }`}
-            >
-              <div className="flex items-center justify-between text-xs sm:text-sm font-bold mb-2">
-                <span className="text-slate-900 font-black">Unsafe Condition (2 reports)</span>
-                <span className="font-mono text-amber-700 font-extrabold">40.0%</span>
-              </div>
-              <div className="w-full h-4 bg-slate-100/90 rounded-full overflow-hidden p-0.5 border border-slate-200/50">
-                <div 
-                  className="h-full bg-gradient-to-r from-amber-400 to-orange-500 rounded-full transition-all duration-500 shadow-xs"
-                  style={{ width: '40%' }}
-                />
-              </div>
-              <div className="mt-2 text-xs text-slate-500 flex items-center justify-between">
-                <span>Level 3 walkway open void & Chemical drum slow drip</span>
-                <span className="font-mono font-bold text-slate-700">2 / 5</span>
-              </div>
-            </div>
-
-            {/* 3. Near-Miss (1 report / 20%) */}
-            <div 
-              onMouseEnter={() => setHoveredBar('NEAR_MISS')}
-              onMouseLeave={() => setHoveredBar(null)}
-              onClick={() => setSelectedFilter(selectedFilter === 'NEAR_MISS' ? 'ALL' : 'NEAR_MISS')}
-              className={`p-4 rounded-2xl border transition-all duration-200 cursor-pointer ${
-                hoveredBar === 'NEAR_MISS' || selectedFilter === 'NEAR_MISS'
-                  ? 'bg-purple-50/90 border-purple-300 shadow-sm ring-2 ring-purple-400/20'
-                  : 'bg-white/60 border-slate-200/70 hover:bg-slate-50/90'
-              }`}
-            >
-              <div className="flex items-center justify-between text-xs sm:text-sm font-bold mb-2">
-                <span className="text-slate-900 font-black">Near-Miss (1 report)</span>
-                <span className="font-mono text-purple-700 font-extrabold">20.0%</span>
-              </div>
-              <div className="w-full h-4 bg-slate-100/90 rounded-full overflow-hidden p-0.5 border border-slate-200/50">
-                <div 
-                  className="h-full bg-gradient-to-r from-purple-500 to-pink-600 rounded-full transition-all duration-500 shadow-xs"
-                  style={{ width: '20%' }}
-                />
-              </div>
-              <div className="mt-2 text-xs text-slate-500 flex items-center justify-between">
-                <span>Dropped 4" steel drilling flange from 18m rig floor</span>
-                <span className="font-mono font-bold text-slate-700">1 / 5</span>
-              </div>
-            </div>
-
-          </div>
-
-          <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-            <span>📊 Classified with NLP hazard extraction & energy vector parsing</span>
+          <div className="flex flex-wrap items-center gap-3 pt-2">
             <button 
-              onClick={onOpenAIAnalysis}
-              className="font-bold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer flex items-center gap-1.5"
+              onClick={() => handleNav('/ai-analysis')} 
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#FF5A36] to-[#FFA133] hover:from-[#e54a26] hover:to-[#e6902b] text-white font-bold text-xs shadow-md shadow-orange-500/25 transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
             >
-              <span>Explore AI Model Logic</span>
-              <ArrowRight className="w-4 h-4" />
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Launch AI Analysis</span>
+              <ArrowRight className="w-3.5 h-3.5 ml-0.5" />
+            </button>
+            <button 
+              onClick={() => handleNav('/reports')} 
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900/50 hover:bg-slate-900/80 border border-white/20 text-white font-semibold text-xs transition-all cursor-pointer shadow-xs"
+            >
+              <FileText className="w-3.5 h-3.5 text-slate-300" />
+              <span>Browse All Reports</span>
             </button>
           </div>
         </div>
 
-      </div>
+        {/* RIGHT HALF: "Safer Tomorrow Together" artistic overlay matching Image 2 */}
+        <div className="relative z-10 pr-10 xl:pr-14 pointer-events-none hidden lg:block select-none text-right">
+          <p className="text-white font-serif italic text-3xl xl:text-4xl tracking-wide drop-shadow-[0_2px_12px_rgba(0,0,0,0.8)] leading-tight opacity-95">
+            Safer<br />Tomorrow<br />Together
+          </p>
+          <div className="w-16 h-1 bg-[#FF5A36] mt-2.5 ml-auto rounded-full shadow-md" />
+        </div>
+      </section>
 
-      {/* ==================================================================== */}
-      {/* 4. REAL DATABASE REPORTS TABLE & LIVE SEARCH TOOLBAR                  */}
-      {/* (Only today's 5 records with interactive filtering and live search)  */}
-      {/* ==================================================================== */}
-      <div className="rounded-3xl bg-white/80 backdrop-blur-2xl border border-white/90 shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-6 sm:p-8 space-y-6">
-        
-        {/* Header with Title and Search/Filter Controls */}
-        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 pb-5 border-b border-slate-100">
+      {/* ================= 1.5 KEY OPERATIONAL METRICS (4 KPIS) ================= */}
+      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Total Safety Reports */}
+        <div className="rounded-2xl bg-white border border-[#EAE6E1] p-5 shadow-xs flex items-center justify-between hover:border-slate-300 transition-all">
           <div>
-            <div className="flex items-center gap-3 flex-wrap">
-              <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight font-heading">
-                SafetyAI Recommendations & Today's 5 Reports
-              </h3>
-              <span className="px-3 py-1 rounded-full text-xs font-mono font-black bg-blue-50 text-blue-700 border border-blue-200/80 shadow-2xs">
-                {filteredReports.length} of {allReportsToday.length} Displayed
-              </span>
-            </div>
-            <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1">
-              Real-time safety observations submitted today for Oil India Limited (No fake or synthetic data)
-            </p>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Safety Reports</p>
+            <h3 className="text-2xl sm:text-3xl font-black font-heading text-slate-900 mt-1">
+              {backendMetrics != null ? backendMetrics.total_reports : activeReports.length}
+            </h3>
+            <p className="text-[11px] text-slate-400 mt-1">Database operational records</p>
           </div>
+          <div className="w-11 h-11 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shadow-2xs">
+            <FileText className="w-5 h-5" />
+          </div>
+        </div>
 
-          {/* Search Bar & Quick Filter Chips */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-            {/* Live Search Input */}
-            <div className="relative min-w-[260px] sm:w-72">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search hazard, location, energy..."
-                className="w-full pl-10 pr-9 py-2 rounded-xl text-xs sm:text-sm bg-slate-50 border border-slate-200/90 text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all font-medium"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-0.5"
+        {/* Analyzed Reports */}
+        <div className="rounded-2xl bg-white border border-[#EAE6E1] p-5 shadow-xs flex items-center justify-between hover:border-slate-300 transition-all">
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Analyzed Reports</p>
+            <h3 className="text-2xl sm:text-3xl font-black font-heading text-slate-900 mt-1">
+              {backendMetrics != null ? backendMetrics.completed_analysis : activeReports.length}
+            </h3>
+            <p className="text-[11px] text-slate-400 mt-1">AI/NLP pipeline completed</p>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-purple-50 border border-purple-100 flex items-center justify-center text-purple-600 shadow-2xs">
+            <Cpu className="w-5 h-5" />
+          </div>
+        </div>
+
+        {/* Potential SIF Findings */}
+        <div className="rounded-2xl bg-white border border-[#EAE6E1] p-5 shadow-xs flex items-center justify-between hover:border-slate-300 transition-all">
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Potential SIF Findings</p>
+            <h3 className="text-2xl sm:text-3xl font-black font-heading text-[#FF5A36] mt-1">
+              {backendMetrics != null 
+                ? backendMetrics.potential_sif_findings 
+                : activeReports.filter(r => r.sif_precursor_assessment === 'YES' || r.risk_level === 'Critical').length}
+            </h3>
+            <p className="text-[11px] text-slate-400 mt-1">High-energy / fatal risk</p>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-center text-[#FF5A36] shadow-2xs">
+            <AlertOctagon className="w-5 h-5" />
+          </div>
+        </div>
+
+        {/* Awaiting Human Review */}
+        <div className="rounded-2xl bg-white border border-[#EAE6E1] p-5 shadow-xs flex items-center justify-between hover:border-slate-300 transition-all">
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Awaiting Human Review</p>
+            <h3 className="text-2xl sm:text-3xl font-black font-heading text-amber-600 mt-1">
+              {backendMetrics != null 
+                ? backendMetrics.awaiting_review 
+                : activeReports.filter(r => r.status === 'Under Review').length}
+            </h3>
+            <p className="text-[11px] text-slate-400 mt-1">Requires safety verification</p>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600 shadow-2xs">
+            <Clock className="w-5 h-5" />
+          </div>
+        </div>
+      </section>
+
+      {/* ================= 2. MAIN ANALYTICS ROW (HAZARD CATEGORIES & SIF DONUT) ================= */}
+      <section className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
+        
+        {/* 1. Hazard Categories Breakdown Bar Chart (7 cols) */}
+        <div className="lg:col-span-7 rounded-2xl bg-white border border-[#EAE6E1] p-5 flex flex-col justify-between shadow-sm min-h-[420px] transition-all text-slate-800">
+          <div className="flex items-center justify-between pb-3 border-b border-stone-100">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-orange-50 border border-orange-200/50 text-[#FF5A36] flex items-center justify-center">
+                <BarChart3 className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold font-heading text-slate-900 tracking-tight">
+                  Hazard Categories
+                </h3>
+                <p className="text-[10.5px] text-slate-500">Distribution across {hazardCategoryData.length} industrial hazard types</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {activeHazard && (
+                <button 
+                  onClick={clearFilters}
+                  className="flex items-center gap-1.5 text-[10.5px] px-2.5 py-1 rounded-lg bg-orange-50 border border-orange-200/60 text-[#FF5A36] font-mono font-bold hover:bg-orange-100 transition-all cursor-pointer shadow-2xs"
+                  title="Click to reset filter"
                 >
-                  <X className="w-3.5 h-3.5" />
+                  <span>{activeHazard} Active</span>
+                  <X className="w-3 h-3" />
                 </button>
               )}
             </div>
+          </div>
 
-            {/* Quick Filter Buttons */}
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {[
-                { key: 'ALL', label: `All (${totalReports})` },
-                { key: 'SIF', label: `SIF Only (${sifCount})` },
-                { key: 'NON_SIF', label: `Non-SIF (${nonSifCount})` },
-                { key: 'NEAR_MISS', label: `Near-Miss (${nearMissCount})` },
-                { key: 'UNSAFE_ACT', label: `Unsafe Act (${unsafeActsCount})` },
-                { key: 'UNSAFE_CONDITION', label: `Condition (${unsafeConditionsCount})` }
-              ].map((item) => (
-                <button
-                  key={item.key}
-                  onClick={() => setSelectedFilter(item.key)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer ${
-                    selectedFilter === item.key
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
-                  }`}
+          {hazardCategoryData.length === 0 ? (
+            <div className="w-full h-72 sm:h-80 lg:h-[310px] flex flex-col items-center justify-center text-center p-6 bg-stone-50/50 rounded-xl border border-dashed border-stone-200 my-auto">
+              <div className="w-12 h-12 rounded-2xl bg-orange-50 border border-orange-100 flex items-center justify-center text-[#FF5A36] mb-3">
+                <BarChart3 className="w-6 h-6" />
+              </div>
+              <p className="text-sm font-bold text-slate-800">No safety reports available yet</p>
+              <p className="text-xs text-slate-500 max-w-sm mt-1 mb-4">
+                Submit a safety observation or upload your site register to visualize real-time hazard category distributions.
+              </p>
+              <button
+                onClick={() => handleNav('/bulk-upload')}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#FF5A36] hover:bg-[#e54a26] text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+              >
+                <UploadCloud className="w-3.5 h-3.5" />
+                <span>Upload Report Register</span>
+              </button>
+            </div>
+          ) : (
+            <div className="w-full h-72 sm:h-80 lg:h-[310px] pt-2 cursor-pointer flex-1 flex items-center">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart 
+                  data={hazardCategoryData} 
+                  margin={{ top: 16, right: 16, left: -20, bottom: 4 }}
+                  barCategoryGap="16%"
+                  onClick={(state) => {
+                    if (state && state.activePayload && state.activePayload[0]) {
+                      handleBarClick(state.activePayload[0].payload);
+                    }
+                  }}
                 >
-                  {item.label}
-                </button>
-              ))}
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+                  <XAxis 
+                    dataKey="shortName" 
+                    stroke="#94A3B8" 
+                    fontSize={11} 
+                    tickLine={false} 
+                    axisLine={{ stroke: '#E2E8F0' }} 
+                    dy={4}
+                  />
+                  <YAxis 
+                    stroke="#94A3B8" 
+                    fontSize={11} 
+                    tickLine={false} 
+                    axisLine={{ stroke: '#E2E8F0' }} 
+                    domain={[0, maxHazardCount]} 
+                    allowDecimals={false}
+                  />
+                  <Tooltip content={<CustomHazardTooltip />} />
+                  <Bar 
+                    dataKey="sifHigh" 
+                    name="SIF Precursor (High)" 
+                    stackId="hazards" 
+                    radius={[0, 0, 4, 4]} 
+                    barSize={46}
+                  >
+                    {hazardCategoryData.map((entry) => (
+                      <Cell 
+                        key={`sif-${entry.shortName}`} 
+                        fill="#FF5A36" 
+                        opacity={activeHazard && activeHazard !== entry.shortName ? 0.35 : 1}
+                        stroke={activeHazard === entry.shortName ? '#FF5A36' : 'none'}
+                        strokeWidth={activeHazard === entry.shortName ? 2 : 0}
+                      />
+                    ))}
+                  </Bar>
+                  <Bar 
+                    dataKey="nonSif" 
+                    name="Non-SIF / Weak Signal" 
+                    stackId="hazards" 
+                    radius={[4, 4, 0, 0]} 
+                    barSize={46}
+                  >
+                    {hazardCategoryData.map((entry) => (
+                      <Cell 
+                        key={`nonsif-${entry.shortName}`} 
+                        fill="#10B981" 
+                        opacity={activeHazard && activeHazard !== entry.shortName ? 0.35 : 1}
+                        stroke={activeHazard === entry.shortName ? '#10B981' : 'none'}
+                        strokeWidth={activeHazard === entry.shortName ? 2 : 0}
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {/* Bottom Chart Legend */}
+          <div className="flex items-center justify-between pt-2.5 border-t border-stone-100 text-[11px]">
+            <div className="flex items-center gap-4">
+              <span className="flex items-center gap-1.5 text-slate-600 font-medium">
+                <span className="w-2.5 h-2.5 rounded-sm bg-[#FF5A36] inline-block" />
+                SIF Precursors
+              </span>
+              <span className="flex items-center gap-1.5 text-slate-600 font-medium">
+                <span className="w-2.5 h-2.5 rounded-sm bg-[#10B981] inline-block" />
+                Non-SIF / Weak Signal
+              </span>
+            </div>
+            <div className="flex items-center gap-2.5">
+              <span className="text-[10.5px] font-mono text-slate-500">
+                Total: <strong className="text-slate-900 font-bold">{activeHazard ? filteredReports.length : hazardCategoryData.reduce((acc, c) => acc + c.total, 0)}</strong> Incidents
+              </span>
             </div>
           </div>
         </div>
 
-        {/* 5 Real Reports Cards List */}
-        <div className="space-y-4">
-          {filteredReports.length === 0 ? (
-            <div className="p-12 text-center rounded-2xl bg-slate-50/80 border border-slate-200/80 space-y-3">
-              <Info className="w-8 h-8 text-slate-400 mx-auto" />
-              <p className="text-base font-bold text-slate-800">No reports matched your search / filter criteria.</p>
-              <button
-                onClick={() => { setSelectedFilter('ALL'); setSearchQuery(''); }}
-                className="text-xs font-bold text-blue-600 hover:underline cursor-pointer"
-              >
-                Clear all filters and search
-              </button>
+        {/* 2. SIF vs Non-SIF vs Near Misses Donut Chart (5 cols) */}
+        <div className="lg:col-span-5 rounded-2xl bg-white border border-[#EAE6E1] p-5 flex flex-col justify-between shadow-sm min-h-[420px] transition-all text-slate-800">
+          <div className="flex items-center justify-between pb-3 border-b border-stone-100">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-orange-50 border border-orange-200/50 text-[#FF5A36] flex items-center justify-center">
+                <PieChartIcon className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold font-heading text-slate-900 tracking-tight">
+                  SIF vs Non-SIF vs Near Miss
+                </h3>
+                <p className="text-[10.5px] text-slate-500">Classification ratio of logged safety reports</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {activeClassification && (
+                <button 
+                  onClick={clearFilters}
+                  className="flex items-center gap-1.5 text-[10.5px] px-2.5 py-1 rounded-lg bg-orange-50 border border-orange-200/60 text-[#FF5A36] font-mono font-bold hover:bg-orange-100 transition-all cursor-pointer shadow-2xs"
+                  title="Click to reset filter"
+                >
+                  <span>{activeClassification.split(' ')[0]} Active</span>
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {summaryReports.length === 0 ? (
+            <div className="flex flex-col items-center justify-center my-auto py-12 px-6 text-center w-full flex-1 bg-stone-50/50 rounded-xl border border-dashed border-stone-200">
+              <div className="w-12 h-12 rounded-2xl bg-orange-50 border border-orange-100 flex items-center justify-center text-[#FF5A36] mb-3">
+                <PieChartIcon className="w-6 h-6" />
+              </div>
+              <p className="text-sm font-bold text-slate-800">No safety reports available yet</p>
+              <p className="text-xs text-slate-500 max-w-xs mt-1">
+                SIF vs Non-SIF breakdown will dynamically update once operational reports are processed.
+              </p>
             </div>
           ) : (
-            filteredReports.map((report) => {
-              const isSIF = report.sif_precursor_assessment === 'YES';
-
-              return (
-                <div 
-                  key={report.id}
-                  className={`p-5 sm:p-6 rounded-2xl border transition-all duration-200 flex flex-col lg:flex-row lg:items-center justify-between gap-5 ${
-                    isSIF
-                      ? 'bg-white/95 border-amber-200/90 hover:border-amber-400 hover:shadow-lg shadow-xs'
-                      : 'bg-white/95 border-emerald-200/90 hover:border-emerald-400 hover:shadow-lg shadow-xs'
-                  }`}
-                >
-                  {/* Left Info Content */}
-                  <div className="space-y-3 flex-1 min-w-0">
-                    
-                    {/* Top Metadata Badges */}
-                    <div className="flex items-center gap-2.5 flex-wrap">
-                      <span className="text-xs font-mono font-black text-slate-900 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200/90 shadow-2xs">
-                        {report.report_reference}
-                      </span>
-                      
-                      <span className={`text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg border ${
-                        report.raw_type === 'NEAR_MISS' 
-                          ? 'bg-purple-50 text-purple-700 border-purple-200'
-                          : report.raw_type === 'UNSAFE_ACT'
-                          ? 'bg-blue-50 text-blue-700 border-blue-200'
-                          : 'bg-amber-50 text-amber-700 border-amber-200'
-                      }`}>
-                        {report.report_type}
-                      </span>
-
-                      {/* SIF Status Badge */}
-                      <span className={`text-xs font-black px-3 py-1 rounded-full flex items-center gap-1.5 border shadow-2xs ${
-                        isSIF 
-                          ? 'bg-amber-100 text-amber-900 border-amber-300'
-                          : 'bg-emerald-100 text-emerald-900 border-emerald-300'
-                      }`}>
-                        {isSIF ? (
-                          <>
-                            <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
-                            <AlertTriangle className="w-3.5 h-3.5" />
-                            <span>POTENTIAL SIF PRECURSOR</span>
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>NON-SIF OBSERVATION</span>
-                          </>
-                        )}
-                      </span>
-
-                      {/* Location Badge */}
-                      <span className="text-xs text-slate-500 font-mono flex items-center gap-1 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200/70">
-                        <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                        <span>{report.location}</span>
-                      </span>
-                    </div>
-
-                    {/* Detailed Observation Narrative */}
-                    <p className="text-sm sm:text-base text-slate-800 font-medium leading-relaxed">
-                      {report.description}
-                    </p>
-
-                    {/* Energy Source & Hazard Pills */}
-                    <div className="flex items-center gap-2 flex-wrap text-xs">
-                      <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-semibold border border-slate-200/80 flex items-center gap-1.5">
-                        <Zap className="w-3.5 h-3.5 text-amber-500" />
-                        <span>Energy: {report.energy_source}</span>
-                      </span>
-
-                      <span className={`px-2.5 py-1 rounded-lg font-semibold border flex items-center gap-1.5 ${
-                        report.barrier_status === 'BARRIER_FAILED' 
-                          ? 'bg-rose-50 text-rose-700 border-rose-200' 
-                          : report.barrier_status === 'BARRIER_MISSING'
-                          ? 'bg-amber-50 text-amber-800 border-amber-200'
-                          : report.barrier_status === 'BARRIER_BYPASSED'
-                          ? 'bg-orange-50 text-orange-800 border-orange-200'
-                          : 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                      }`}>
-                        <Shield className="w-3.5 h-3.5" />
-                        <span>Barrier: {report.barrier_status?.replace('_', ' ')}</span>
-                      </span>
-                    </div>
-
-                    {/* SafetyAI Recommendation Banner */}
-                    <div className="p-3.5 rounded-xl bg-slate-50/90 border border-slate-200/80 flex items-start gap-2.5 text-xs sm:text-sm">
-                      <Sparkles className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-                      <div>
-                        <span className="font-black text-slate-900">SafetyAI Recommendation: </span>
-                        <span className="text-slate-700 font-medium">{report.recommended_action}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Right Action Button */}
-                  <div className="shrink-0 flex items-center">
-                    <button
-                      type="button"
-                      onClick={() => onSelectReport(report)}
-                      className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs sm:text-sm shadow-md shadow-blue-600/25 transition-all cursor-pointer flex items-center justify-center gap-2 hover:scale-[1.02]"
+            /* Centered Large Interactive Donut Chart */
+            <div className="flex flex-col items-center justify-center my-auto py-2 gap-3 w-full flex-1">
+              <div className="relative w-64 h-64 sm:w-72 sm:h-72 lg:w-[310px] lg:h-[310px] shrink-0 flex items-center justify-center">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={classificationDistributionData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={76}
+                      outerRadius={122}
+                      paddingAngle={4}
+                      dataKey="value"
+                      onClick={(entry) => handleClassificationClick(entry.name)}
+                      onMouseEnter={(_, index) => setDonutHoverIndex(index)}
+                      onMouseLeave={() => setDonutHoverIndex(null)}
+                      className="cursor-pointer outline-none"
                     >
-                      <span>View Full AI Analysis</span>
-                      <ExternalLink className="w-4 h-4" />
-                    </button>
-                  </div>
+                      {classificationDistributionData.map((entry, index) => {
+                        const isHovered = donutHoverIndex === index;
+                        const isSelected = activeClassification === entry.name;
+                        const isFaded = (activeClassification && !isSelected) || (donutHoverIndex !== null && !isHovered && !isSelected);
+                        return (
+                          <Cell 
+                            key={`cell-${index}`} 
+                            fill={entry.color} 
+                            stroke="#FFFFFF" 
+                            strokeWidth={isSelected ? 4 : isHovered ? 3 : 2}
+                            opacity={isFaded ? 0.35 : 1}
+                            style={{
+                              filter: isSelected || isHovered ? `drop-shadow(0 4px 12px ${entry.color}40)` : 'none',
+                              transition: 'all 0.2s ease',
+                              cursor: 'pointer'
+                            }}
+                          />
+                        );
+                      })}
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
 
+                {/* Dynamic Interactive Center Readout */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none transition-all duration-200 select-none">
+                  {donutHoverIndex !== null ? (
+                    <div className="text-center px-3 animate-in fade-in zoom-in-95 duration-150">
+                      <span className="text-4xl sm:text-5xl font-black font-heading text-slate-900 tracking-tight block">
+                        {classificationDistributionData[donutHoverIndex].count}
+                      </span>
+                      <span 
+                        className="text-xs font-bold uppercase tracking-wider block max-w-[130px] mx-auto truncate mt-1"
+                        style={{ color: classificationDistributionData[donutHoverIndex].color }}
+                      >
+                        {classificationDistributionData[donutHoverIndex].name}
+                      </span>
+                      <span className="text-xs font-mono text-slate-500 font-semibold block mt-0.5">
+                        {classificationDistributionData[donutHoverIndex].value}% of total
+                      </span>
+                    </div>
+                  ) : activeClassification ? (
+                    <div className="text-center px-3 animate-in fade-in zoom-in-95 duration-150">
+                      <span className="text-4xl sm:text-5xl font-black font-heading text-[#FF5A36] tracking-tight block">
+                        {classificationDistributionData.find(c => c.name === activeClassification)?.count || 0}
+                      </span>
+                      <span className="text-xs font-bold uppercase tracking-wider text-[#FF5A36] block max-w-[130px] mx-auto truncate mt-1">
+                        {activeClassification}
+                      </span>
+                      <span className="text-xs font-mono text-slate-500 font-semibold block mt-0.5">
+                        {classificationDistributionData.find(c => c.name === activeClassification)?.value || 0}%
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="text-center px-3">
+                      <span className="text-4xl sm:text-5xl font-black text-slate-900 font-heading tracking-tight block">{summaryReports.length}</span>
+                      <span className="text-xs font-bold text-slate-500 uppercase tracking-widest block mt-1">Reports</span>
+                      <span className="text-[10.5px] font-mono text-[#FF5A36] font-semibold block mt-0.5">Analyzed</span>
+                    </div>
+                  )}
                 </div>
-              );
-            })
+              </div>
+
+              {/* Interactive Centered Pills with richer spacing and stats */}
+              <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2 w-full">
+                {classificationDistributionData.map((item, index) => {
+                  const isSelected = activeClassification === item.name;
+                  const isHovered = donutHoverIndex === index;
+                  return (
+                    <button 
+                      key={item.name} 
+                      onClick={() => handleClassificationClick(item.name)}
+                      onMouseEnter={() => setDonutHoverIndex(index)}
+                      onMouseLeave={() => setDonutHoverIndex(null)}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer border ${
+                        isSelected 
+                          ? 'bg-orange-50 border-orange-200 text-[#FF5A36] font-bold shadow-xs scale-105' 
+                          : isHovered
+                            ? 'bg-stone-100 border-stone-300 text-slate-900 scale-102 shadow-2xs'
+                            : 'bg-[#FBF9F6] border-[#EAE6E1] text-slate-700 hover:bg-stone-100 hover:border-stone-300'
+                      }`}
+                    >
+                      <span className="w-2.5 h-2.5 rounded-full shrink-0 shadow-2xs" style={{ backgroundColor: item.color }} />
+                      <span className="text-xs font-semibold">{item.name}</span>
+                      <span className="font-mono text-xs text-slate-500 font-bold">({item.count})</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           )}
+
         </div>
 
-      </div>
+      </section>
+
+      {/* ================= 3. SIF-WISE TRAJECTORY (FULL WIDTH) ================= */}
+      <section className="w-full">
+        <div className="w-full rounded-2xl bg-white border border-[#EAE6E1] p-6 sm:p-7 shadow-sm transition-all text-slate-800 space-y-4">
+          
+          {/* Chart Header */}
+          <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 pb-4 border-b border-stone-100">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-mono font-bold uppercase tracking-wider text-[#FF5A36]">
+                  SIF-WISE TRAJECTORY
+                </span>
+                <span className="text-slate-300">•</span>
+                <span className="text-xs text-slate-500 font-medium">4 Monitored Operating Units</span>
+                {siteDayWiseData.length > 0 && (
+                  <>
+                    <span className="text-slate-300">•</span>
+                    <span className="text-xs text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/60 font-mono font-medium flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      Rolling Daily (Through {siteDayWiseData[siteDayWiseData.length - 1]?.day})
+                    </span>
+                  </>
+                )}
+              </div>
+              <h3 className="text-lg sm:text-xl font-bold font-heading text-slate-900 tracking-tight mt-1">
+                Daily Incident &amp; SIF Velocity Across Units
+              </h3>
+            </div>
+
+            {/* Colored dots legend for the 4 Units */}
+            <div className="flex flex-wrap items-center gap-4 text-xs font-semibold">
+              <span className="flex items-center gap-2 text-slate-700 bg-[#FAF8F5] px-3 py-1.5 rounded-lg border border-[#EAE6E1]">
+                <span className="w-3 h-3 rounded-full bg-[#10B981] inline-block shadow-2xs" />
+                Unit 1
+              </span>
+              <span className="flex items-center gap-2 text-slate-700 bg-[#FAF8F5] px-3 py-1.5 rounded-lg border border-[#EAE6E1]">
+                <span className="w-3 h-3 rounded-full bg-[#FF5A36] inline-block shadow-2xs" />
+                Unit 2
+              </span>
+              <span className="flex items-center gap-2 text-slate-700 bg-[#FAF8F5] px-3 py-1.5 rounded-lg border border-[#EAE6E1]">
+                <span className="w-3 h-3 rounded-full bg-[#3B82F6] inline-block shadow-2xs" />
+                Unit 3
+              </span>
+              <span className="flex items-center gap-2 text-slate-700 bg-[#FAF8F5] px-3 py-1.5 rounded-lg border border-[#EAE6E1]">
+                <span className="w-3 h-3 rounded-full bg-[#64748B] inline-block shadow-2xs" />
+                Unit 4
+              </span>
+            </div>
+          </div>
+
+          {/* Spline Curve Multi-Line Chart or Empty State */}
+          {siteDayWiseData.length === 0 ? (
+            <div className="w-full h-72 sm:h-80 flex flex-col items-center justify-center text-center p-6 bg-stone-50/50 rounded-xl border border-dashed border-stone-200">
+              <div className="w-12 h-12 rounded-2xl bg-orange-50 border border-orange-100 flex items-center justify-center text-[#FF5A36] mb-3">
+                <TrendingUp className="w-6 h-6" />
+              </div>
+              <p className="text-sm font-bold text-slate-800">No safety reports available yet</p>
+              <p className="text-xs text-slate-500 max-w-md mt-1">
+                Multi-unit velocity curves and daily precursor trajectories will render as incident and near-miss logs are captured.
+              </p>
+            </div>
+          ) : (
+            <div className="w-full h-72 sm:h-80 pt-2">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart 
+                  data={siteDayWiseData}
+                  margin={{ top: 15, right: 25, left: -10, bottom: 5 }}
+                >
+                  <CartesianGrid stroke="#F1F5F9" strokeDasharray="0" vertical={true} horizontal={true} />
+                  <XAxis 
+                    dataKey="day" 
+                    stroke="#94A3B8" 
+                    fontSize={12} 
+                    tickLine={false} 
+                    axisLine={{ stroke: '#E2E8F0' }}
+                    dy={8}
+                  />
+                  <YAxis 
+                    stroke="#94A3B8" 
+                    fontSize={12} 
+                    tickLine={false} 
+                    axisLine={{ stroke: '#E2E8F0' }}
+                    domain={[0, maxTrajectoryCount]}
+                    allowDecimals={false}
+                  />
+                  <Tooltip content={<CustomTrajectoryTooltip />} />
+                  <Line 
+                    type="monotone" 
+                    dataKey="plant01" 
+                    name="Unit 1" 
+                    stroke="#10B981" 
+                    strokeWidth={3} 
+                    dot={{ r: 4, fill: '#10B981', stroke: '#ffffff', strokeWidth: 2 }} 
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="plant02" 
+                    name="Unit 2" 
+                    stroke="#FF5A36" 
+                    strokeWidth={3} 
+                    dot={{ r: 4, fill: '#FF5A36', stroke: '#ffffff', strokeWidth: 2 }} 
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="plant03" 
+                    name="Unit 3" 
+                    stroke="#3B82F6" 
+                    strokeWidth={3} 
+                    dot={{ r: 4, fill: '#3B82F6', stroke: '#ffffff', strokeWidth: 2 }} 
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="plant04" 
+                    name="Unit 4" 
+                    stroke="#64748B" 
+                    strokeWidth={3} 
+                    dot={{ r: 4, fill: '#64748B', stroke: '#ffffff', strokeWidth: 2 }} 
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+      </section>
+
+
+      {/* ================= 5. FOOTER ================= */}
+      <footer className="pt-2 pb-1 flex flex-col sm:flex-row items-center justify-between text-[11px] text-slate-500 gap-2">
+        <div className="hidden sm:block">
+          {/* subtle left spacer */}
+        </div>
+        <div className="flex items-center gap-4 ml-auto">
+          <span className="text-slate-400">
+            Last data synchronization: 2 minutes ago
+          </span>
+          <span className="flex items-center gap-1.5 text-emerald-700 font-medium">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            All systems operational
+          </span>
+        </div>
+      </footer>
 
     </div>
   );

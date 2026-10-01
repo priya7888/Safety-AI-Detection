@@ -54,18 +54,7 @@ export default function ReportsTriageView({ onSelectReport, externalFilter, init
   const [reviewerNotes, setReviewerNotes] = useState('');
   const [isEscalated, setIsEscalated] = useState(false);
   const [isFalsePositive, setIsFalsePositive] = useState(false);
-  const [auditLog, setAuditLog] = useState([
-    {
-      timestamp: '2026-09-06 08:30:15',
-      user: 'AI/NLP Engine v2.4',
-      action: 'Automated Ingestion & SIF-Precursor Assessment (94.2% confidence)'
-    },
-    {
-      timestamp: '2026-09-06 08:35:00',
-      user: 'HSSE Gatekeeper Rule',
-      action: 'Tagged to IOGP LSR-04 (Safe Mechanical Lifting)'
-    }
-  ]);
+  const [auditLog, setAuditLog] = useState([]);
   const [auditSavedMessage, setAuditSavedMessage] = useState('');
 
   useEffect(() => {
@@ -101,6 +90,16 @@ export default function ReportsTriageView({ onSelectReport, externalFilter, init
       setIsEscalated(false);
       setIsFalsePositive(false);
       setAuditSavedMessage('');
+      
+      const ts = rep?.created_at || rep?.report_date || new Date().toISOString().replace('T', ' ').slice(0, 19);
+      const isSIF = rep?.sif_precursor_assessment === 'YES';
+      setAuditLog([
+        {
+          timestamp: ts,
+          user: 'AI/NLP Engine',
+          action: `Automated Ingestion & SIF-Precursor Assessment (${isSIF ? 'SIF Precursor Flagged' : 'Routine Safe Observation'})`
+        }
+      ]);
     } catch (err) {
       console.error(err);
     } finally {
@@ -112,19 +111,23 @@ export default function ReportsTriageView({ onSelectReport, externalFilter, init
     setActiveDrawerReport(null);
   };
 
-  // Map reports with synthetic enrichment for full mock demo consistency
-  const enrichedReports = reports.map((r, idx) => {
+  // Map reports with real attributes
+  const enrichedReports = reports.map((r) => {
     const isSIF = r.sif_precursor_assessment === 'YES';
-    const lsrAssignment = IOGP_LIFE_SAVING_RULES[idx % IOGP_LIFE_SAVING_RULES.length];
-    const status = idx === 0 ? 'NEW' : idx % 3 === 0 ? 'REVIEWED' : idx % 5 === 0 ? 'ESCALATED' : 'NEW';
-    const reporter = idx % 2 === 0 ? 'Mechanical Tech (Bay 2)' : 'Drilling Rig Roughneck';
-    const confidence = isSIF ? (91 + (idx % 7)) : (84 + (idx % 12));
+    const desc = `${r.identified_hazard || ''} ${r.description || ''}`.toLowerCase();
+    const matchedRule = IOGP_LIFE_SAVING_RULES.find(rule => 
+      (rule.keywords || []).some(kw => desc.includes(kw)) || desc.includes(rule.name.toLowerCase())
+    ) || IOGP_LIFE_SAVING_RULES[0];
+
+    const status = r.status || 'NEW';
+    const reporter = r.reporter_name || r.user?.full_name || 'Frontline Observer';
+    const confidence = r.ai_score || (r.ai_analysis?.confidence_score ? Math.round(r.ai_analysis.confidence_score * 100) : (isSIF ? 92 : 78));
 
     return {
       ...r,
       isSIF,
-      lsrTag: r.identified_hazard ? lsrAssignment.name : 'Line of Fire',
-      lsrCode: lsrAssignment.code,
+      lsrTag: matchedRule ? matchedRule.name : 'Line of Fire',
+      lsrCode: matchedRule ? matchedRule.code : 'LSR-03',
       confidenceScore: confidence,
       triageStatus: status,
       reporterDept: reporter
@@ -346,7 +349,7 @@ export default function ReportsTriageView({ onSelectReport, externalFilter, init
         {/* Active Filter Pills & Bulk Controls */}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-800/80 text-xs">
           <div className="flex items-center gap-2 text-slate-400">
-            <span>Showing <strong>{filteredReports.length}</strong> matching reports (Total: 401)</span>
+            <span>Showing <strong>{filteredReports.length}</strong> matching reports (Total: {reports.length})</span>
             {(searchTerm || filterType !== 'ALL' || filterSif !== 'ALL' || filterLsr !== 'ALL' || filterStatus !== 'ALL') && (
               <button
                 onClick={() => {
@@ -397,7 +400,7 @@ export default function ReportsTriageView({ onSelectReport, externalFilter, init
                 <th className="p-3.5 w-10 text-center">
                   <button 
                     onClick={handleToggleSelectAll}
-                    className="text-slate-400 hover:text-white cursor-pointer"
+                    className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-amber-400 transition-colors cursor-pointer"
                   >
                     {selectedIds.size === filteredReports.length && filteredReports.length > 0 ? (
                       <CheckSquare className="w-4 h-4 text-amber-400" />
@@ -419,118 +422,137 @@ export default function ReportsTriageView({ onSelectReport, externalFilter, init
 
             {/* Table Body */}
             <tbody className="divide-y divide-slate-800/60 text-slate-200">
-              {filteredReports.map((r) => {
-                const isSelected = selectedIds.has(r.id);
-                return (
-                  <tr 
-                    key={r.id}
-                    onClick={() => handleOpenDrawer(r.id)}
-                    className={`hover:bg-slate-850/80 transition-colors cursor-pointer group ${
-                      isSelected ? 'bg-amber-500/5' : ''
-                    }`}
-                  >
-                    {/* Checkbox */}
-                    <td 
-                      className="p-3.5 text-center"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleToggleSelect(r.id);
-                      }}
+              {loading ? (
+                <tr>
+                  <td colSpan="9" className="p-16 text-center text-slate-400">
+                    <div className="w-8 h-8 border-3 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                    <span className="text-xs font-mono">Fetching triage observation stream...</span>
+                  </td>
+                </tr>
+              ) : reports.length === 0 ? (
+                <tr>
+                  <td colSpan="9" className="p-16 text-center text-slate-400 space-y-2">
+                    <Inbox className="w-10 h-10 text-slate-600 mx-auto" />
+                    <p className="font-bold text-slate-200 text-sm">No Operational Safety Reports</p>
+                    <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                      No safety observations have been submitted yet. Ingest field reports via Single Submission or Bulk Upload to triage SIF precursors.
+                    </p>
+                  </td>
+                </tr>
+              ) : filteredReports.length === 0 ? (
+                <tr>
+                  <td colSpan="9" className="p-12 text-center text-slate-400">
+                    <p className="font-bold text-slate-300 text-xs">No reports match current filter criteria.</p>
+                  </td>
+                </tr>
+              ) : (
+                filteredReports.map((r) => {
+                  const isSelected = selectedIds.has(r.id);
+                  return (
+                    <tr 
+                      key={r.id}
+                      onClick={() => handleOpenDrawer(r.id)}
+                      className={`hover:bg-[#121A2D] cursor-pointer transition-colors group ${
+                        isSelected ? 'bg-amber-500/5' : ''
+                      }`}
                     >
-                      <button className="text-slate-400 hover:text-amber-400 cursor-pointer">
-                        {isSelected ? (
-                          <CheckSquare className="w-4 h-4 text-amber-400" />
-                        ) : (
-                          <Square className="w-4 h-4 text-slate-600" />
-                        )}
-                      </button>
-                    </td>
+                      {/* Select Checkbox */}
+                      <td className="p-3.5 text-center" onClick={(e) => e.stopPropagation()}>
+                        <button 
+                          onClick={() => handleToggleSelect(r.id)}
+                          className="p-1 rounded text-slate-400 hover:text-amber-400 cursor-pointer"
+                        >
+                          {isSelected ? (
+                            <CheckSquare className="w-4 h-4 text-amber-400" />
+                          ) : (
+                            <Square className="w-4 h-4" />
+                          )}
+                        </button>
+                      </td>
 
-                    {/* Report ID & Date */}
-                    <td className="p-3.5 font-mono">
-                      <div className="font-bold text-slate-200 group-hover:text-amber-400 transition-colors">
-                        {r.report_reference}
-                      </div>
-                      <div className="text-[10px] text-slate-500">
-                        {r.report_date}
-                      </div>
-                    </td>
+                      {/* Report ID & Date */}
+                      <td className="p-3.5 font-mono">
+                        <div className="font-bold text-slate-200 group-hover:text-amber-400 transition-colors">
+                          {r.report_reference}
+                        </div>
+                        <div className="text-[10px] text-slate-500">
+                          {r.report_date}
+                        </div>
+                      </td>
 
-                    {/* Site Location */}
-                    <td className="p-3.5">
-                      <div className="font-semibold text-slate-200 truncate max-w-[140px]">
-                        {r.location}
-                      </div>
-                    </td>
+                      {/* Site Location */}
+                      <td className="p-3.5">
+                        <div className="font-semibold text-slate-200 truncate max-w-[140px]">
+                          {r.location}
+                        </div>
+                      </td>
 
-                    {/* Reporter Dept */}
-                    <td className="p-3.5 text-slate-400 text-[11px]">
-                      {r.reporterDept}
-                    </td>
+                      {/* Reporter Dept */}
+                      <td className="p-3.5 text-slate-400 text-[11px]">
+                        {r.reporterDept}
+                      </td>
 
-                    {/* Free-Text Preview */}
-                    <td className="p-3.5 max-w-xs">
-                      <p className="line-clamp-2 text-slate-300 leading-relaxed">
-                        {r.description}
-                      </p>
-                    </td>
+                      {/* Free-Text Preview */}
+                      <td className="p-3.5 max-w-xs">
+                        <p className="line-clamp-2 text-slate-300 leading-relaxed">
+                          {r.description}
+                        </p>
+                      </td>
 
-                    {/* AI Classification & Confidence Badge */}
-                    <td className="p-3.5">
-                      <div className="flex flex-col items-start gap-1">
-                        {r.isSIF ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 font-black text-[10px] border border-amber-500/40">
-                            <CheckCircle2 className="w-3 h-3 text-amber-400" />
-                            SIF POTENTIAL
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 text-[10px] font-medium border border-slate-700">
-                            NON-SIF
-                          </span>
-                        )}
-                        <span className="text-[10px] text-slate-500 font-mono">
-                          {r.confidenceScore}% confidence
+                      {/* AI Classification & Confidence Badge */}
+                      <td className="p-3.5">
+                        <div className="flex flex-col items-start gap-1">
+                          {r.isSIF ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 font-black text-[10px] border border-amber-500/40">
+                              <CheckCircle2 className="w-3 h-3 text-amber-400" />
+                              SIF POTENTIAL
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 text-[10px] font-medium border border-slate-700">
+                              NON-SIF
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Life-Saving Rule */}
+                      <td className="p-3.5">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-slate-700 text-[10px] font-mono">
+                          <span className="text-amber-400 font-bold">{r.lsrCode}</span>
+                          <span className="truncate max-w-[110px]">{r.lsrTag}</span>
                         </span>
-                      </div>
-                    </td>
+                      </td>
 
-                    {/* Life-Saving Rule */}
-                    <td className="p-3.5">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-slate-700 text-[10px] font-mono">
-                        <span className="text-amber-400 font-bold">{r.lsrCode}</span>
-                        <span className="truncate max-w-[110px]">{r.lsrTag}</span>
-                      </span>
-                    </td>
+                      {/* Status */}
+                      <td className="p-3.5">
+                        <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          r.triageStatus === 'NEW'
+                            ? 'bg-blue-500/10 text-blue-400 border border-blue-500/30'
+                            : r.triageStatus === 'REVIEWED'
+                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                            : 'bg-red-500/10 text-red-400 border border-red-500/30'
+                        }`}>
+                          {r.triageStatus}
+                        </span>
+                      </td>
 
-                    {/* Status */}
-                    <td className="p-3.5">
-                      <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        r.triageStatus === 'NEW'
-                          ? 'bg-blue-500/10 text-blue-400 border border-blue-500/30'
-                          : r.triageStatus === 'REVIEWED'
-                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                          : 'bg-red-500/10 text-red-400 border border-red-500/30'
-                      }`}>
-                        {r.triageStatus}
-                      </span>
-                    </td>
-
-                    {/* Actions */}
-                    <td className="p-3.5 text-right">
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenDrawer(r.id);
-                        }}
-                        className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-amber-500 hover:text-slate-950 text-slate-300 text-[11px] font-bold transition-all cursor-pointer inline-flex items-center gap-1"
-                      >
-                        <span>Details</span>
-                        <ChevronRight className="w-3 h-3" />
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
+                      {/* Actions */}
+                      <td className="p-3.5 text-right">
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenDrawer(r.id);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-amber-500 hover:text-slate-950 text-slate-300 text-[11px] font-bold transition-all cursor-pointer inline-flex items-center gap-1"
+                        >
+                          <span>Details</span>
+                          <ChevronRight className="w-3 h-3" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>

@@ -1,48 +1,42 @@
-"""
-SafetyReport model.
-
-Represents a single Unsafe Act / Unsafe Condition / Near-Miss report along
-with the results of the AI/NLP analysis performed on it.
-"""
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Text
+import enum
+from datetime import datetime
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
+from ..database import Base
 
-from app.database import Base
+class ReportTypeEnum(str, enum.Enum):
+    UNSAFE_ACT = "UNSAFE_ACT"
+    UNSAFE_CONDITION = "UNSAFE_CONDITION"
+    NEAR_MISS = "NEAR_MISS"
 
+class AnalysisStatusEnum(str, enum.Enum):
+    PENDING = "PENDING"
+    PROCESSING = "PROCESSING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
 
 class SafetyReport(Base):
     __tablename__ = "safety_reports"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    report_reference = Column(String(50), unique=True, index=True, nullable=False) # e.g. REP-00101
+    organization_id = Column(String(50), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    
+    report_type = Column(String(50), nullable=False) # UNSAFE_ACT, UNSAFE_CONDITION, NEAR_MISS
+    description = Column(Text, nullable=False)
+    original_description = Column(Text, nullable=True)
+    normalized_description = Column(Text, nullable=True)
+    location = Column(String(200), nullable=False)
+    report_date = Column(String(50), nullable=False)
+    additional_context = Column(Text, nullable=True)
+    
+    analysis_status = Column(String(50), default="PENDING", nullable=False) # PENDING, PROCESSING, COMPLETED, FAILED
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # --- raw input ---
-    report_text = Column(Text, nullable=False)
-    report_type = Column(String(50), nullable=False)  # Unsafe Act / Unsafe Condition / Near Miss
-    site = Column(String(100), nullable=True, index=True)
-    location = Column(String(150), nullable=True)
-    activity_input = Column(String(150), nullable=True)  # activity supplied by the user, if any
-    report_date = Column(DateTime, nullable=True)
-
-    # --- AI analysis output ---
-    sif_potential = Column(Boolean, nullable=False, default=False, index=True)
-    confidence_score = Column(Float, nullable=False, default=0.0)
-    activity = Column(String(150), nullable=True, index=True)  # extracted/normalized activity / hazard
-    extracted_location = Column(String(150), nullable=True)
-    barrier_failure = Column(String(150), nullable=True, index=True)
-    explanation = Column(Text, nullable=True)
-    status = Column(String(50), nullable=False, default="Completed")  # Completed / Processing / Pending / Failed
-
-    # --- Human-in-the-Loop Review ---
-    is_reviewed = Column(Boolean, nullable=False, default=False, index=True)
-    reviewer_feedback = Column(Text, nullable=True)
-    reviewed_at = Column(DateTime(timezone=True), nullable=True)
-
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-
-    rule_mappings = relationship(
-        "ReportRuleMapping",
-        back_populates="report",
-        cascade="all, delete-orphan",
-    )
-
+    organization = relationship("Organization", back_populates="safety_reports")
+    user = relationship("User", back_populates="safety_reports")
+    ai_analysis = relationship("AIAnalysis", back_populates="safety_report", uselist=False, cascade="all, delete-orphan")
+    feedbacks = relationship("Feedback", back_populates="safety_report", cascade="all, delete-orphan")
+    weak_signals = relationship("WeakSignal", secondary="report_weak_signals", back_populates="safety_reports")

@@ -1,0 +1,48 @@
+======================================================================
+LEAKAGE-CONTROLLED SIF TEXT MODEL EVALUATION REPORT
+======================================================================
+Model Architecture:          Pipeline(TfidfVectorizer + LogisticRegression)
+Data Source:                 C:\Users\Dell\.gemini\antigravity-ide\scratch\safety-intelligence-platform\ml\data\sif_dataset.csv
+Random State:                42
+Number of Training Samples:  12,000
+Number of Test Samples:      3,000
+Number of TF-IDF Features:   1,093
+Target Classes:              ['Non-SIF-potential', 'SIF-potential']
+----------------------------------------------------------------------
+Overall Metrics on Held-out Test Data:
+  - Accuracy:                1.0000 (100.00%)
+  - Weighted Precision:       1.0000
+  - Weighted Recall:          1.0000
+  - Weighted F1-Score:        1.0000
+----------------------------------------------------------------------
+SIF-potential Specific Metrics:
+  - Precision:               1.0000
+  - Recall:                  1.0000
+  - F1-Score:                1.0000
+----------------------------------------------------------------------
+Confusion Matrix (rows: actual, cols: predicted):
+  Labels: ['SIF-potential', 'Non-SIF-potential']
+  [[ 1500 (TP: SIF),         0 (FN: SIF->Non)]
+   [    0 (FP: Non->SIF),  1500 (TN: Non)]]
+----------------------------------------------------------------------
+Classification Report:
+                   precision    recall  f1-score   support
+
+Non-SIF-potential     1.0000    1.0000    1.0000      1500
+    SIF-potential     1.0000    1.0000    1.0000      1500
+
+         accuracy                         1.0000      3000
+        macro avg     1.0000    1.0000    1.0000      3000
+     weighted avg     1.0000    1.0000    1.0000      3000
+
+----------------------------------------------------------------------
+CRITICAL REAL-WORLD PERFORMANCE & ACCURACY NOTE:
+  Although the model demonstrates high performance metrics on this synthetic
+  benchmark test split due to consistent phrasing patterns generated in the
+  prototype dataset (e.g. 'housekeeping issue was observed', 'personnel were
+  exposed', 'loss of control'), we DO NOT claim that this NLP model is
+  perfectly accurate.
+  In real-world operations, human-authored safety incident reports exhibit
+  substantial linguistic diversity, varied terminology, spelling errors,
+  and colloquial shorthand that will lead to real-world classification errors.
+======================================================================

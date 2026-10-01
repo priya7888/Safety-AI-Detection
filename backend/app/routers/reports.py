@@ -1,196 +1,336 @@
-"""
-Report-related endpoints:
-
-  POST /api/reports/analyze   - analyze and store a single report
-  GET  /api/reports           - list reports (with search/filter/pagination)
-  GET  /api/reports/{id}      - full detail for one report
-  POST /api/reports/upload    - bulk CSV upload
-"""
+import re
+import csv
 import io
-from typing import Optional, List
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
+from sqlalchemy.orm import Session
+from ..database import get_db
+from ..models.user import User
+from ..models.safety_report import SafetyReport
+from ..models.ai_analysis import AIAnalysis
+from ..models.feedback import Feedback
+from ..schemas.safety_report import SafetyReportCreate, SafetyReportListItem, SafetyReportDetail
+from ..schemas.ai_analysis import AIAnalysisResponse
+from ..dependencies import get_current_user
+from ..services.report_service import (
+    create_report, 
+    get_organization_reports, 
+    get_report_by_id,
+    find_duplicate_report
+)
+from ..services.analysis_service import execute_ai_analysis
+from ..services.historical_pattern_service import detect_and_update_weak_signals
 
-import pandas as pd
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
-from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import or_
+router = APIRouter(prefix="/api/reports", tags=["Safety Reports"])
 
-from app.database import get_db
-from app.models.safety_report import SafetyReport
-from app.schemas.report import ReportCreate, ReportResponse, ReportListItem, UploadSummary
-from app.services.report_processing_service import process_and_store_report, get_report_rule_names
+def extract_unit_key(val: str) -> str:
+    if not val:
+        return ""
+    s = str(val).strip().lower()
+    m = re.search(r'unit\s*[-_#]?\s*0*(\d+)', s, re.IGNORECASE)
+    if m:
+        return f"unit-{int(m.group(1))}"
+    s = re.sub(r'[-_]', ' ', s)
+    return re.sub(r'\s+', ' ', s).strip()
 
-router = APIRouter(prefix="/api/reports", tags=["reports"])
-
-REQUIRED_CSV_COLUMNS = {"report_text", "report_type"}
-OPTIONAL_CSV_COLUMNS = ["site", "location", "activity"]
-
-
-def _to_response(report: SafetyReport) -> ReportResponse:
-    return ReportResponse(
-        id=report.id,
-        report_text=report.report_text,
-        report_type=report.report_type,
-        site=report.site,
-        location=report.extracted_location or report.location,
-        activity=report.activity,
-        barrier_failure=report.barrier_failure,
-        sif_potential=report.sif_potential,
-        confidence_score=report.confidence_score,
-        explanation=report.explanation,
-        life_saving_rules=get_report_rule_names(report),
-        created_at=report.created_at,
-    )
-
-
-@router.post("/analyze", response_model=ReportResponse)
-def analyze_report(payload: ReportCreate, db: Session = Depends(get_db)):
-    valid_types = {"Unsafe Act", "Unsafe Condition", "Near Miss"}
-    if payload.report_type not in valid_types:
-        raise HTTPException(status_code=422, detail=f"report_type must be one of {sorted(valid_types)}")
-
-    report = process_and_store_report(
-        db,
-        report_text=payload.report_text,
-        report_type=payload.report_type,
-        site=payload.site,
-        location=payload.location,
-        activity=payload.activity,
-        report_date=payload.report_date,
-    )
-    db.commit()
-    db.refresh(report)
-    return _to_response(report)
-
-
-@router.get("", response_model=List[ReportListItem])
-def list_reports(
-    db: Session = Depends(get_db),
-    search: Optional[str] = Query(None, description="Search within report text"),
-    sif_status: Optional[str] = Query(None, description="'yes' or 'no'"),
-    report_type: Optional[str] = Query(None),
-    site: Optional[str] = Query(None),
-    skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=500),
+@router.post("", response_model=SafetyReportDetail, status_code=status.HTTP_201_CREATED)
+def submit_report(
+    payload: SafetyReportCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
-    query = db.query(SafetyReport).options(joinedload(SafetyReport.rule_mappings))
-
-    if search:
-        like = f"%{search}%"
-        query = query.filter(
-            or_(SafetyReport.report_text.ilike(like), SafetyReport.activity.ilike(like))
-        )
-    if sif_status:
-        if sif_status.lower() == "yes":
-            query = query.filter(SafetyReport.sif_potential.is_(True))
-        elif sif_status.lower() == "no":
-            query = query.filter(SafetyReport.sif_potential.is_(False))
-    if report_type:
-        query = query.filter(SafetyReport.report_type == report_type)
-    if site:
-        query = query.filter(SafetyReport.site == site)
-
-    reports = (
-        query.order_by(SafetyReport.created_at.desc()).offset(skip).limit(limit).all()
-    )
-
-    return [
-        ReportListItem(
-            id=r.id,
-            report_text=r.report_text,
-            report_type=r.report_type,
-            site=r.site,
-            activity=r.activity,
-            sif_potential=r.sif_potential,
-            confidence_score=r.confidence_score,
-            life_saving_rules=get_report_rule_names(r),
-            created_at=r.created_at,
-        )
-        for r in reports
-    ]
-
-
-@router.get("/{report_id}", response_model=ReportResponse)
-def get_report(report_id: int, db: Session = Depends(get_db)):
-    report = (
-        db.query(SafetyReport)
-        .options(joinedload(SafetyReport.rule_mappings))
-        .filter(SafetyReport.id == report_id)
-        .first()
-    )
-    if not report:
-        raise HTTPException(status_code=404, detail="Report not found")
-    return _to_response(report)
-
-
-@router.post("/upload", response_model=UploadSummary)
-async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    if not file.filename.lower().endswith(".csv"):
-        raise HTTPException(status_code=422, detail="Only .csv files are supported")
-
-    raw = await file.read()
-    try:
-        df = pd.read_csv(io.BytesIO(raw))
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"Could not parse CSV: {exc}")
-
-    missing = REQUIRED_CSV_COLUMNS - set(df.columns)
-    if missing:
+    """
+    Submits an industrial safety report under the authenticated user's organization
+    and executes the real modular AI/NLP SIF analysis pipeline.
+    """
+    if not payload.description or len(payload.description.strip()) < 5:
         raise HTTPException(
-            status_code=422,
-            detail=f"CSV is missing required column(s): {', '.join(sorted(missing))}",
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Please describe the safety observation in detail."
+        )
+    if not payload.location or len(payload.location.strip()) < 2:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Please provide a valid location or operational area."
         )
 
-    total_processed = 0
-    sif_count = 0
-    non_sif_count = 0
-    failed_rows = 0
-    errors: List[str] = []
-    created_reports: List[SafetyReport] = []
+    # 1. Create Report in DB
+    report = create_report(db, payload, current_user)
 
-    valid_types = {"Unsafe Act", "Unsafe Condition", "Near Miss"}
+    # 2. Run AI Analysis Pipeline
+    try:
+        execute_ai_analysis(db, report)
+    except Exception as e:
+        # If analysis fails, report status is set to FAILED
+        pass
 
-    for idx, row in df.iterrows():
-        try:
-            report_text = str(row.get("report_text", "")).strip()
-            report_type = str(row.get("report_type", "")).strip()
-            if not report_text or report_text.lower() == "nan":
-                raise ValueError("report_text is empty")
-            if report_type not in valid_types:
-                raise ValueError(f"invalid report_type '{report_type}'")
+    db.refresh(report)
+    return report
 
-            def _clean(val):
-                if pd.isna(val):
-                    return None
-                val = str(val).strip()
-                return val or None
-
-            report = process_and_store_report(
-                db,
-                report_text=report_text,
-                report_type=report_type,
-                site=_clean(row.get("site")),
-                location=_clean(row.get("location")),
-                activity=_clean(row.get("activity")),
-            )
-            created_reports.append(report)
-            total_processed += 1
-            if report.sif_potential:
-                sif_count += 1
-            else:
-                non_sif_count += 1
-        except Exception as exc:  # keep processing remaining rows
-            failed_rows += 1
-            errors.append(f"Row {idx + 2}: {exc}")  # +2 accounts for header + 0-index
-
-    db.commit()
-    for r in created_reports:
-        db.refresh(r)
-
-    return UploadSummary(
-        total_processed=total_processed,
-        sif_potential_count=sif_count,
-        non_sif_count=non_sif_count,
-        failed_rows=failed_rows,
-        errors=errors[:20],  # cap error list for a clean response
-        reports=[_to_response(r) for r in created_reports],
+@router.get("", response_model=List[SafetyReportListItem])
+def list_reports(
+    search: Optional[str] = Query(None),
+    report_type: Optional[str] = Query(None),
+    analysis_status: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Lists safety reports strictly isolated to the authenticated organization."""
+    return get_organization_reports(
+        db=db,
+        org_id=current_user.organization_id,
+        search=search,
+        report_type=report_type,
+        analysis_status=analysis_status
     )
+
+@router.get("/{report_id}", response_model=SafetyReportDetail)
+def get_report_details(
+    report_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Retrieves full details and AI analysis for a report belonging to the organization."""
+    report = get_report_by_id(db, report_id, current_user.organization_id)
+    if not report:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Safety report not found or access denied."
+        )
+    return report
+
+@router.post("/{report_id}/analyze", response_model=AIAnalysisResponse)
+def trigger_analysis(
+    report_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Triggers or re-executes AI analysis on an existing organization report."""
+    report = get_report_by_id(db, report_id, current_user.organization_id)
+    if not report:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Safety report not found or access denied."
+        )
+    
+    analysis = execute_ai_analysis(db, report)
+    return analysis
+
+@router.get("/{report_id}/analysis", response_model=AIAnalysisResponse)
+def get_report_analysis(
+    report_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Retrieves AI analysis for a specific report."""
+    report = get_report_by_id(db, report_id, current_user.organization_id)
+    if not report or not report.ai_analysis:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="AI analysis not found for this report."
+        )
+    return report.ai_analysis
+
+@router.post("/reset")
+def reset_organization_reports(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # Admin role guard
+    is_admin = (
+        current_user.role in ["ADMINISTRATOR", "CHIEF_HSE_AUDITOR"] or 
+        "admin" in current_user.email.lower()
+    )
+    if not is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Action restricted: Only Administrators can reset or clear static organization data."
+        )
+    
+    org_id = current_user.organization_id
+    
+    db.query(Feedback).filter(Feedback.organization_id == org_id).delete(synchronize_session=False)
+    db.query(AIAnalysis).filter(AIAnalysis.organization_id == org_id).delete(synchronize_session=False)
+    deleted_count = db.query(SafetyReport).filter(SafetyReport.organization_id == org_id).delete(synchronize_session=False)
+    db.commit()
+    
+    return {
+        "status": "success",
+        "message": f"Successfully cleared all {deleted_count} reports and related data. Organization data reset.",
+        "deleted_count": deleted_count
+    }
+
+@router.post("/batch")
+def batch_upload_reports(
+    payload: List[SafetyReportCreate],
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Batch ingests safety reports, skips duplicate records before database insertion
+    and AI analysis, and returns verified records.
+    """
+    seen_in_batch = set()
+    results = []
+    new_count = 0
+    duplicate_count = 0
+    analyzed_count = 0
+    failed_count = 0
+    weak_signals_count = 0
+
+    for item in payload:
+        try:
+            norm_type = item.report_type.upper().replace("-", "_").replace(" ", "_")
+            if norm_type not in ["UNSAFE_ACT", "UNSAFE_CONDITION", "NEAR_MISS"]:
+                norm_type = "UNSAFE_CONDITION"
+
+            item_date = item.report_date.strip() if item.report_date and item.report_date.strip() else datetime.utcnow().strftime("%Y-%m-%d")
+            batch_key = (
+                item_date,
+                " ".join(item.location.strip().lower().split()),
+                norm_type,
+                " ".join(item.description.strip().lower().split())
+            )
+
+            # Intra-batch duplicate check
+            if batch_key in seen_in_batch:
+                duplicate_count += 1
+                continue
+            seen_in_batch.add(batch_key)
+
+            # Database duplicate check against authenticated organization
+            existing = find_duplicate_report(db, current_user.organization_id, item)
+            if existing:
+                duplicate_count += 1
+                results.append({
+                    "id": existing.id,
+                    "report_reference": existing.report_reference,
+                    "location": existing.location,
+                    "report_type": existing.report_type,
+                    "description": existing.description,
+                    "report_date": existing.report_date,
+                    "analysis_status": existing.analysis_status,
+                    "sif_precursor_assessment": existing.ai_analysis.sif_precursor_assessment if existing.ai_analysis else "NO",
+                    "identified_hazard": existing.ai_analysis.identified_hazard if existing.ai_analysis else "Pending Assessment",
+                    "is_duplicate": True
+                })
+                continue
+
+            # Genuinely new report: create, analyze, and correlate
+            report = create_report(db, item, current_user)
+            analysis = None
+            try:
+                analysis = execute_ai_analysis(db, report)
+                analyzed_count += 1
+            except Exception:
+                failed_count += 1
+
+            db.refresh(report)
+            new_count += 1
+
+            # Historical pattern comparison & Weak signal detection
+            if analysis:
+                try:
+                    ws_res = detect_and_update_weak_signals(
+                        db=db,
+                        org_id=current_user.organization_id,
+                        current_report=report,
+                        raw_nlp_result={
+                            "identified_hazard": analysis.identified_hazard,
+                            "energy_source": analysis.energy_source,
+                            "barrier_information": analysis.barrier_information,
+                            "identified_action": analysis.identified_action
+                        }
+                    )
+                    if ws_res.get("weak_signal_detected"):
+                        weak_signals_count += 1
+                except Exception:
+                    pass
+
+            results.append({
+                "id": report.id,
+                "report_reference": report.report_reference,
+                "location": report.location,
+                "report_type": report.report_type,
+                "description": report.description,
+                "report_date": report.report_date,
+                "analysis_status": report.analysis_status,
+                "sif_precursor_assessment": report.ai_analysis.sif_precursor_assessment if report.ai_analysis else "NO",
+                "identified_hazard": report.ai_analysis.identified_hazard if report.ai_analysis else "Pending Assessment",
+                "is_duplicate": False
+            })
+        except Exception:
+            failed_count += 1
+            continue
+
+    return {
+        "status": "success",
+        "records_received": len(payload),
+        "records_created": new_count,
+        "records_analyzed": analyzed_count,
+        "records_failed": failed_count,
+        "weak_signals_detected": weak_signals_count,
+        "ingested_count": new_count,
+        "new_count": new_count,
+        "duplicate_count": duplicate_count,
+        "total_processed": len(payload),
+        "reports": results
+    }
+
+@router.post("/bulk-upload")
+async def bulk_upload_reports_alias(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Unified Bulk Ingestion Endpoint.
+    Accepts both JSON array payload and multipart/form-data CSV file uploads.
+    Sequentially ingests records, executes AI analysis, and detects weak signals.
+    """
+    content_type = request.headers.get("content-type", "")
+    reports_list = []
+
+    if "multipart/form-data" in content_type:
+        form = await request.form()
+        uploaded_file = None
+        for field in form.values():
+            if hasattr(field, "filename") and field.filename:
+                uploaded_file = field
+                break
+        
+        if not uploaded_file:
+            raise HTTPException(status_code=400, detail="No file found in multipart upload.")
+        
+        contents = await uploaded_file.read()
+        text_data = contents.decode("utf-8", errors="replace")
+        csv_reader = csv.DictReader(io.StringIO(text_data))
+        
+        for row in csv_reader:
+            # Map common column headers flexibly
+            desc = row.get("description") or row.get("Description") or row.get("incident_description") or ""
+            loc = row.get("location") or row.get("Site") or row.get("site") or "General Facility"
+            rtype = row.get("report_type") or row.get("Report Type") or row.get("type") or "UNSAFE_CONDITION"
+            rdate = row.get("incident_date") or row.get("report_date") or row.get("Date") or ""
+            
+            if desc.strip():
+                reports_list.append(SafetyReportCreate(
+                    description=desc.strip(),
+                    location=loc.strip(),
+                    report_type=rtype.strip(),
+                    report_date=rdate.strip() if rdate.strip() else None
+                ))
+    else:
+        body = await request.json()
+        if isinstance(body, list):
+            for item in body:
+                reports_list.append(SafetyReportCreate(**item))
+        elif isinstance(body, dict) and "reports" in body:
+            for item in body["reports"]:
+                reports_list.append(SafetyReportCreate(**item))
+        else:
+            raise HTTPException(status_code=400, detail="Expected a JSON array of reports.")
+
+    return batch_upload_reports(reports_list, current_user, db)
+
+

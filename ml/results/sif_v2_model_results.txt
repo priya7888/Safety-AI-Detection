@@ -1,0 +1,125 @@
+================================================================================
+ SIF DATASET V2 MACHINE LEARNING MODEL EVALUATION REPORT
+================================================================================
+Data Source:            C:\Users\Dell\.gemini\antigravity-ide\scratch\safety-intelligence-platform\ml\data\sif_dataset_v2.csv
+Total Records:          15,000
+Train Split:            12,000 (80.0%, Stratified)
+Test Split:             3,000 (20.0%, Stratified)
+Random State:           42
+Structured Features:    report_type, location, activity, barrier_failure, observed_severity, life_saving_rule
+Text Feature:           report_text
+
+--------------------------------------------------------------------------------
+MODEL: Structured Logistic Regression
+Saved Artifact: C:\Users\Dell\.gemini\antigravity-ide\scratch\safety-intelligence-platform\ml\models\sif_v2_structured_logistic_regression.joblib
+--------------------------------------------------------------------------------
+Test Set Performance:
+  Accuracy:             0.6967 (69.67%)
+  Weighted Precision:   0.6967
+  Weighted Recall:      0.6967
+  Weighted F1-Score:    0.6966
+SIF-potential Specific Focus:
+  Precision:            0.6931
+  Recall:               0.7060
+  F1-Score:             0.6995
+Overfitting Cross-Check (Train vs Test):
+  Train Accuracy:       0.6864  |  Test Accuracy:    0.6967  (Gap: -1.02%)
+  Train Weighted F1:    0.6864  |  Test Weighted F1: 0.6966  (Gap: -1.03%)
+  [HEALTHY] Model generalizes consistently between train and test splits.
+Confusion Matrix (rows: actual, cols: predicted):
+  Labels: ['SIF-potential', 'Non-SIF-potential']
+  [[ 1059 (TP: SIF),       441 (FN: SIF->Non)]
+   [  469 (FP: Non->SIF),  1031 (TN: Non)]]
+Classification Report:
+                   precision    recall  f1-score   support
+
+Non-SIF-potential     0.7004    0.6873    0.6938      1500
+    SIF-potential     0.6931    0.7060    0.6995      1500
+
+         accuracy                         0.6967      3000
+        macro avg     0.6967    0.6967    0.6966      3000
+     weighted avg     0.6967    0.6967    0.6966      3000
+
+
+--------------------------------------------------------------------------------
+MODEL: Structured Random Forest
+Saved Artifact: C:\Users\Dell\.gemini\antigravity-ide\scratch\safety-intelligence-platform\ml\models\sif_v2_structured_random_forest.joblib
+--------------------------------------------------------------------------------
+Test Set Performance:
+  Accuracy:             0.6633 (66.33%)
+  Weighted Precision:   0.6633
+  Weighted Recall:      0.6633
+  Weighted F1-Score:    0.6633
+SIF-potential Specific Focus:
+  Precision:            0.6636
+  Recall:               0.6627
+  F1-Score:             0.6631
+Overfitting Cross-Check (Train vs Test):
+  Train Accuracy:       0.9898  |  Test Accuracy:    0.6633  (Gap: +32.65%)
+  Train Weighted F1:    0.9898  |  Test Weighted F1: 0.6633  (Gap: +32.65%)
+  [OVERFITTING WARNING] Training score is noticeably higher than test score by 32.6% accuracy.
+Confusion Matrix (rows: actual, cols: predicted):
+  Labels: ['SIF-potential', 'Non-SIF-potential']
+  [[  994 (TP: SIF),       506 (FN: SIF->Non)]
+   [  504 (FP: Non->SIF),   996 (TN: Non)]]
+Classification Report:
+                   precision    recall  f1-score   support
+
+Non-SIF-potential     0.6631    0.6640    0.6636      1500
+    SIF-potential     0.6636    0.6627    0.6631      1500
+
+         accuracy                         0.6633      3000
+        macro avg     0.6633    0.6633    0.6633      3000
+     weighted avg     0.6633    0.6633    0.6633      3000
+
+
+--------------------------------------------------------------------------------
+MODEL: NLP Text TF-IDF + Logistic Regression
+Saved Artifact: C:\Users\Dell\.gemini\antigravity-ide\scratch\safety-intelligence-platform\ml\models\sif_v2_text_tfidf_logistic_regression.joblib
+--------------------------------------------------------------------------------
+Test Set Performance:
+  Accuracy:             0.7977 (79.77%)
+  Weighted Precision:   0.7977
+  Weighted Recall:      0.7977
+  Weighted F1-Score:    0.7977
+SIF-potential Specific Focus:
+  Precision:            0.7967
+  Recall:               0.7993
+  F1-Score:             0.7980
+Overfitting Cross-Check (Train vs Test):
+  Train Accuracy:       0.8090  |  Test Accuracy:    0.7977  (Gap: +1.13%)
+  Train Weighted F1:    0.8090  |  Test Weighted F1: 0.7977  (Gap: +1.13%)
+  [HEALTHY] Model generalizes consistently between train and test splits.
+Confusion Matrix (rows: actual, cols: predicted):
+  Labels: ['SIF-potential', 'Non-SIF-potential']
+  [[ 1199 (TP: SIF),       301 (FN: SIF->Non)]
+   [  306 (FP: Non->SIF),  1194 (TN: Non)]]
+Classification Report:
+                   precision    recall  f1-score   support
+
+Non-SIF-potential     0.7987    0.7960    0.7973      1500
+    SIF-potential     0.7967    0.7993    0.7980      1500
+
+         accuracy                         0.7977      3000
+        macro avg     0.7977    0.7977    0.7977      3000
+     weighted avg     0.7977    0.7977    0.7977      3000
+
+
+================================================================================
+MODEL SELECTION DECISION
+================================================================================
+Selected Best Model:    NLP Text TF-IDF + Logistic Regression
+Best Weighted F1:       0.7977
+SIF-potential Recall:   0.7993 (79.93%)
+Model Artifact File:    C:\Users\Dell\.gemini\antigravity-ide\scratch\safety-intelligence-platform\ml\models\sif_v2_text_tfidf_logistic_regression.joblib
+Selection Rationale:    Selected primarily on Weighted F1-score (harmonic mean across
+                        both classes) and high recall on the critical SIF-potential class,
+                        which is paramount for minimizing undetected severe hazards.
+
+================================================================================
+IMPORTANT SAFETY DATA DISCLAIMER
+================================================================================
+Model performance is measured on synthetic V2 data and does not represent
+validated real-world safety performance.
+Do not claim that the model is production-ready or perfectly accurate.
+================================================================================

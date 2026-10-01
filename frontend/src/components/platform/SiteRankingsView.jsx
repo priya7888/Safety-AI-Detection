@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   BarChart3, 
   MapPin, 
@@ -15,14 +15,56 @@ import {
   FileText
 } from 'lucide-react';
 import { HorizontalRankingChart } from '../common/Charts';
-import { SITE_RANKINGS } from '../../data/platformData';
+import { getStoreState, subscribeSafetyStore } from '../../services/safetyStore';
 
 export default function SiteRankingsView({ onFilterReportsBySite }) {
-  const [sortField, setSortField] = useState('density'); // 'density', 'sifReports', 'exposureHours', 'totalReports'
+  const [storeState, setStoreState] = useState(getStoreState());
+  const [sortField, setSortField] = useState('density');
   const [sortAsc, setSortAsc] = useState(false);
   const [selectedSite, setSelectedSite] = useState(null);
 
-  const sortedSites = [...SITE_RANKINGS].sort((a, b) => {
+  useEffect(() => {
+    const unsub = subscribeSafetyStore(setStoreState);
+    return unsub;
+  }, []);
+
+  const siteRankings = useMemo(() => {
+    const reports = storeState.reports || [];
+    if (reports.length === 0) return [];
+
+    const siteMap = {};
+    reports.forEach(r => {
+      const site = r.location || 'Unit 1';
+      if (!siteMap[site]) {
+        siteMap[site] = {
+          id: `SITE-${Object.keys(siteMap).length + 1}`,
+          name: site,
+          code: site.toUpperCase().replace(/\s+/g, '-'),
+          category: 'Refinery Processing',
+          totalReports: 0,
+          sifReports: 0,
+          exposureHours: 12000,
+          topPrecursor: r.identified_hazard || 'Operational Safety Finding',
+          topPrecursorLSR: 'Process Safety Control',
+          status: 'Normal'
+        };
+      }
+      siteMap[site].totalReports += 1;
+      const isSIF = r.sif_precursor_assessment === 'YES' || r.risk_level === 'Critical' || (r.ai_score && r.ai_score >= 80);
+      if (isSIF) siteMap[site].sifReports += 1;
+    });
+
+    return Object.values(siteMap).map(s => {
+      const density = s.totalReports > 0 ? s.sifReports / s.totalReports : 0;
+      return {
+        ...s,
+        density,
+        status: density >= 0.25 ? 'Critical' : density >= 0.20 ? 'High' : density >= 0.15 ? 'Moderate' : 'Low'
+      };
+    });
+  }, [storeState.reports]);
+
+  const sortedSites = [...siteRankings].sort((a, b) => {
     let valA = a[sortField];
     let valB = b[sortField];
     return sortAsc ? valA - valB : valB - valA;
@@ -37,7 +79,7 @@ export default function SiteRankingsView({ onFilterReportsBySite }) {
     }
   };
 
-  const barChartData = [...SITE_RANKINGS]
+  const barChartData = [...siteRankings]
     .sort((a, b) => b.density - a.density)
     .map(s => ({
       name: s.name,
@@ -97,14 +139,22 @@ export default function SiteRankingsView({ onFilterReportsBySite }) {
         </div>
 
         <div className="pt-2">
-          <HorizontalRankingChart 
-            data={barChartData} 
-            maxValOverride={35}
-            onBarClick={(item) => {
-              const matched = SITE_RANKINGS.find(s => s.code === item.code);
-              if (matched) setSelectedSite(matched);
-            }}
-          />
+          {barChartData.length === 0 ? (
+            <div className="p-8 text-center text-xs text-slate-400 border border-slate-800/60 rounded-xl">
+              <BarChart3 className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+              <p className="font-semibold text-slate-300">No site density data available yet.</p>
+              <p className="text-slate-500 mt-1">Submit or upload safety reports across operating units to calculate real-time precursor density.</p>
+            </div>
+          ) : (
+            <HorizontalRankingChart 
+              data={barChartData} 
+              maxValOverride={35}
+              onBarClick={(item) => {
+                const matched = siteRankings.find(s => s.code === item.code);
+                if (matched) setSelectedSite(matched);
+              }}
+            />
+          )}
         </div>
       </div>
 
@@ -169,12 +219,19 @@ export default function SiteRankingsView({ onFilterReportsBySite }) {
             </thead>
 
             <tbody className="divide-y divide-slate-800/60 text-slate-200">
-              {sortedSites.map((site, index) => (
-                <tr 
-                  key={site.id}
-                  onClick={() => setSelectedSite(site)}
-                  className="hover:bg-slate-850/80 transition-colors cursor-pointer group"
-                >
+              {sortedSites.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="p-8 text-center text-slate-500 font-medium">
+                    No operating site records available yet. Data will populate automatically upon report logging.
+                  </td>
+                </tr>
+              ) : (
+                sortedSites.map((site, index) => (
+                  <tr 
+                    key={site.id}
+                    onClick={() => setSelectedSite(site)}
+                    className="hover:bg-slate-850/80 transition-colors cursor-pointer group"
+                  >
                   {/* Rank */}
                   <td className="p-3.5 font-mono font-bold text-slate-400 group-hover:text-amber-400">
                     #{index + 1}
