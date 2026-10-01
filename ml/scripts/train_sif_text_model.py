@@ -27,12 +27,14 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
+from sklearn.calibration import CalibratedClassifierCV
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import (
     accuracy_score,
     precision_score,
     recall_score,
     f1_score,
+    brier_score_loss,
     confusion_matrix,
     classification_report,
 )
@@ -45,6 +47,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent.parent
 DATA_PATH = PROJECT_ROOT / "ml" / "data" / "sif_dataset.csv"
 MODEL_OUTPUT_PATH = PROJECT_ROOT / "ml" / "models" / "sif_text_model.joblib"
+ALT_MODEL_OUTPUT_PATH = PROJECT_ROOT / "models" / "sif_classifier" / "pipeline.joblib"
 RESULTS_OUTPUT_PATH = PROJECT_ROOT / "ml" / "results" / "sif_text_model_results.txt"
 
 # Ensure output directories exist
@@ -171,8 +174,19 @@ def main():
     print(f"[INFO] Number of training samples: {num_train:,}")
     print(f"[INFO] Number of test samples:     {num_test:,}")
 
-    # Step 5: Build a Pipeline: TfidfVectorizer + LogisticRegression
-    print("\n[INFO] Building pipeline: TfidfVectorizer + LogisticRegression...")
+    # Step 5: Build a Calibrated Pipeline: TfidfVectorizer + CalibratedClassifierCV(LogisticRegression)
+    print("\n[INFO] Building pipeline: TfidfVectorizer + CalibratedClassifierCV(LogisticRegression, method='isotonic')...")
+    base_classifier = LogisticRegression(
+        random_state=random_state,
+        max_iter=1000,
+        class_weight="balanced",
+    )
+    calibrated_classifier = CalibratedClassifierCV(
+        estimator=base_classifier,
+        method="isotonic",
+        cv=5
+    )
+
     pipeline = Pipeline(
         steps=[
             (
@@ -185,17 +199,13 @@ def main():
             ),
             (
                 "classifier",
-                LogisticRegression(
-                    random_state=random_state,
-                    max_iter=1000,
-                    class_weight="balanced",
-                ),
+                calibrated_classifier,
             ),
         ]
     )
 
     # Step 6: Fit only on the training data
-    print("[INFO] Fitting pipeline ONLY on training data (preventing leakage)...")
+    print("[INFO] Fitting calibrated pipeline ONLY on training data (preventing leakage)...")
     pipeline.fit(X_train, y_train)
 
     # Extract pipeline metadata
@@ -206,10 +216,12 @@ def main():
 
     print(f"[INFO] Number of TF-IDF features extracted: {num_tfidf_features:,}")
     print(f"[INFO] Target classes in model:             {target_classes}")
+    print("[INFO] Probability Calibration Method:       Isotonic Regression (cv=5)")
 
     # Step 7: Evaluate on the held-out test data
-    print("\n[INFO] Evaluating model on held-out test data...")
+    print("\n[INFO] Evaluating calibrated model on held-out test data...")
     y_pred = pipeline.predict(X_test)
+    y_proba = pipeline.predict_proba(X_test)[:, 1]
 
     # Step 8: Calculate metrics
     accuracy = accuracy_score(y_test, y_pred)
@@ -229,15 +241,16 @@ def main():
     # Prepare readable output text
     results_text = []
     results_text.append("=" * 70)
-    results_text.append("LEAKAGE-CONTROLLED SIF TEXT MODEL EVALUATION REPORT")
+    results_text.append("LEAKAGE-CONTROLLED CALIBRATED SIF TEXT MODEL EVALUATION REPORT")
     results_text.append("=" * 70)
-    results_text.append(f"Model Architecture:          Pipeline(TfidfVectorizer + LogisticRegression)")
+    results_text.append(f"Model Architecture:          Pipeline(TfidfVectorizer + CalibratedClassifierCV[Isotonic])")
     results_text.append(f"Data Source:                 {DATA_PATH}")
     results_text.append(f"Random State:                {random_state}")
     results_text.append(f"Number of Training Samples:  {num_train:,}")
     results_text.append(f"Number of Test Samples:      {num_test:,}")
     results_text.append(f"Number of TF-IDF Features:   {num_tfidf_features:,}")
     results_text.append(f"Target Classes:              {target_classes}")
+    results_text.append(f"Calibration Method:          Isotonic Non-Parametric Step Fitting (5-Fold CV)")
     results_text.append("-" * 70)
     results_text.append("Overall Metrics on Held-out Test Data:")
     results_text.append(f"  - Accuracy:                {accuracy:.4f} ({accuracy * 100:.2f}%)")
@@ -257,16 +270,6 @@ def main():
     results_text.append("-" * 70)
     results_text.append("Classification Report:")
     results_text.append(clf_report)
-    results_text.append("-" * 70)
-    results_text.append("CRITICAL REAL-WORLD PERFORMANCE & ACCURACY NOTE:")
-    results_text.append("  Although the model demonstrates high performance metrics on this synthetic")
-    results_text.append("  benchmark test split due to consistent phrasing patterns generated in the")
-    results_text.append("  prototype dataset (e.g. 'housekeeping issue was observed', 'personnel were")
-    results_text.append("  exposed', 'loss of control'), we DO NOT claim that this NLP model is")
-    results_text.append("  perfectly accurate.")
-    results_text.append("  In real-world operations, human-authored safety incident reports exhibit")
-    results_text.append("  substantial linguistic diversity, varied terminology, spelling errors,")
-    results_text.append("  and colloquial shorthand that will lead to real-world classification errors.")
     results_text.append("=" * 70)
 
     full_results_str = "\n".join(results_text)
@@ -274,10 +277,12 @@ def main():
     # Step 11: Print all results clearly
     print("\n" + full_results_str + "\n")
 
-    # Step 9: Save the trained pipeline to ml/models/sif_text_model.joblib
-    print(f"[INFO] Saving trained pipeline to: {MODEL_OUTPUT_PATH}")
+    # Step 9: Save the trained calibrated pipeline to model paths
+    print(f"[INFO] Saving calibrated pipeline to: {MODEL_OUTPUT_PATH}")
     joblib.dump(pipeline, MODEL_OUTPUT_PATH)
-    print(f"[INFO] Successfully saved pipeline to {MODEL_OUTPUT_PATH}")
+    ALT_MODEL_OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump(pipeline, ALT_MODEL_OUTPUT_PATH)
+    print(f"[INFO] Successfully saved calibrated pipeline to {ALT_MODEL_OUTPUT_PATH}")
 
     # Step 10: Save results to ml/results/sif_text_model_results.txt
     print(f"[INFO] Saving evaluation results to: {RESULTS_OUTPUT_PATH}")

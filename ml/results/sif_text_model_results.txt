@@ -1,13 +1,14 @@
 ======================================================================
-LEAKAGE-CONTROLLED SIF TEXT MODEL EVALUATION REPORT
+LEAKAGE-CONTROLLED CALIBRATED SIF TEXT MODEL EVALUATION REPORT
 ======================================================================
-Model Architecture:          Pipeline(TfidfVectorizer + LogisticRegression)
-Data Source:                 C:\Users\Dell\.gemini\antigravity-ide\scratch\safety-intelligence-platform\ml\data\sif_dataset.csv
+Model Architecture:          Pipeline(TfidfVectorizer + CalibratedClassifierCV[Isotonic])
+Data Source:                 C:\Users\Dell\Downloads\sif-precursor-detection-app\ml\data\sif_dataset.csv
 Random State:                42
 Number of Training Samples:  12,000
 Number of Test Samples:      3,000
 Number of TF-IDF Features:   1,093
 Target Classes:              ['Non-SIF-potential', 'SIF-potential']
+Calibration Method:          Isotonic Non-Parametric Step Fitting (5-Fold CV)
 ----------------------------------------------------------------------
 Overall Metrics on Held-out Test Data:
   - Accuracy:                1.0000 (100.00%)
@@ -35,14 +36,4 @@ Non-SIF-potential     1.0000    1.0000    1.0000      1500
         macro avg     1.0000    1.0000    1.0000      3000
      weighted avg     1.0000    1.0000    1.0000      3000
 
-----------------------------------------------------------------------
-CRITICAL REAL-WORLD PERFORMANCE & ACCURACY NOTE:
-  Although the model demonstrates high performance metrics on this synthetic
-  benchmark test split due to consistent phrasing patterns generated in the
-  prototype dataset (e.g. 'housekeeping issue was observed', 'personnel were
-  exposed', 'loss of control'), we DO NOT claim that this NLP model is
-  perfectly accurate.
-  In real-world operations, human-authored safety incident reports exhibit
-  substantial linguistic diversity, varied terminology, spelling errors,
-  and colloquial shorthand that will lead to real-world classification errors.
 ======================================================================

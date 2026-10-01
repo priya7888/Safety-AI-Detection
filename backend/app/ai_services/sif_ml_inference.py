@@ -127,20 +127,34 @@ def get_model():
 
 def get_contributing_features(pipeline, text: str, top_n: int = 5) -> List[Dict[str, Any]]:
     """
-    Extracts the top active terms in the report and their linear contribution weights.
+    Extracts the top active terms in the report and their linear contribution weights,
+    supporting both standard and calibrated (CalibratedClassifierCV) models.
     """
     try:
         tfidf = pipeline.named_steps.get("tfidf") or pipeline.named_steps.get("vectorizer")
         clf = pipeline.named_steps.get("clf") or pipeline.named_steps.get("classifier")
 
-        if not tfidf or not clf or not hasattr(clf, "coef_"):
+        if not tfidf or not clf:
+            return []
+
+        # Extract coefficients whether direct LogisticRegression or CalibratedClassifierCV
+        coef = None
+        if hasattr(clf, "coef_"):
+            coef = clf.coef_[0]
+        elif hasattr(clf, "calibrated_classifiers_") and len(clf.calibrated_classifiers_) > 0:
+            sub_clf = clf.calibrated_classifiers_[0]
+            if hasattr(sub_clf, "estimator") and hasattr(sub_clf.estimator, "coef_"):
+                coef = sub_clf.estimator.coef_[0]
+        elif hasattr(clf, "estimator") and hasattr(clf.estimator, "coef_"):
+            coef = clf.estimator.coef_[0]
+
+        if coef is None:
             return []
 
         # Vectorize single input
         vec = tfidf.transform([text])
         indices = vec.nonzero()[1]
         feature_names = np.array(tfidf.get_feature_names_out())
-        coef = clf.coef_[0]
 
         contributions = []
         for idx in indices:
