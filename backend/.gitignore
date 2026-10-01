@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.env
+*.db
+*.sqlite3
+venv/
+.venv/
+app/ml/model_artifacts/
+.pytest_cache/

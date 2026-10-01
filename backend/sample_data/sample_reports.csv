@@ -1,0 +1,16 @@
+report_text,report_type,site,location,activity
+Worker performed maintenance without isolating electrical energy.,Unsafe Act,Site A,Electrical Room,Maintenance
+Worker entered a vessel without proper gas testing.,Near Miss,Site A,Vessel,Confined Space Entry
+Welding was performed without a proper hot work permit.,Unsafe Act,Site B,Workshop,Hot Work
+Worker was standing below a suspended load.,Unsafe Condition,Site A,Yard,Lifting Operation
+Worker slipped while walking in the office but was not seriously injured.,Near Miss,Site C,Office,
+Employee worked on scaffold without guardrails at height.,Unsafe Condition,Site B,Scaffold,Working at Height
+Technician bypassed lockout tagout procedure during panel repair.,Unsafe Act,Site A,Electrical Panel,Maintenance
+Crew member entered silo without confined space entry permit.,Unsafe Act,Site C,Silo,Confined Space Entry
+Cutting operation performed without fire watch or hot work permit.,Unsafe Act,Site B,Workshop,Hot Work
+Employee walked under a raised forklift load.,Near Miss,Site A,Warehouse,Vehicle Operation
+Rigger used unrated chain for a critical lift.,Unsafe Condition,Site C,Yard,Lifting Operation
+Worker climbed ladder above six feet without fall arrest system.,Unsafe Act,Site B,Rooftop,Working at Height
+Employee tripped over a cable in the corridor.,Near Miss,Site A,Corridor,Housekeeping
+Fitter opened flange on live line without isolation and drained system.,Unsafe Act,Site A,Process Area,Maintenance
+Minor paper cut while handling documents at the desk.,Near Miss,Site C,Office,
