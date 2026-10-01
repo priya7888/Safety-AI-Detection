@@ -46,6 +46,66 @@ except (ImportError, ValueError):
         HAZARD_SEVERITY_WEIGHTS = {}
 
 
+def compute_dempster_shafer_fusion(
+    p_rule: float,
+    p_ml: float,
+    p_maut: float
+) -> Dict[str, Any]:
+    """
+    Implements Dempster-Shafer Theory of Evidence Combination (DST).
+    Combines independent belief masses over Frame of Discernment Theta = {SIF, NON_SIF}:
+    m_1 = Deterministic Rule Engine
+    m_2 = Calibrated Logistic Regression Probability
+    m_3 = MAUT High-Energy Exposure Multiplier
+    
+    Calculates Orthogonal Sum m_1 ⊕ m_2 ⊕ m_3 and computes Belief / Plausibility intervals:
+    Bel(SIF) <= P(SIF) <= Pl(SIF)
+    """
+    # Mass 1 (Rule):
+    m1_sif = p_rule * 0.85
+    m1_non = (1.0 - p_rule) * 0.85
+    m1_theta = 0.15
+
+    # Mass 2 (ML):
+    m2_sif = p_ml * 0.90
+    m2_non = (1.0 - p_ml) * 0.90
+    m2_theta = 0.10
+
+    # Step 1: Combine m1 and m2
+    k12 = (m1_sif * m2_non) + (m1_non * m2_sif)
+    norm12 = max(0.001, 1.0 - k12)
+
+    m12_sif = ((m1_sif * m2_sif) + (m1_sif * m2_theta) + (m1_theta * m2_sif)) / norm12
+    m12_non = ((m1_non * m2_non) + (m1_non * m2_theta) + (m1_theta * m2_non)) / norm12
+    m12_theta = (m1_theta * m2_theta) / norm12
+
+    # Mass 3 (MAUT Energy Vector):
+    m3_sif = p_maut * 0.80
+    m3_non = (1.0 - p_maut) * 0.80
+    m3_theta = 0.20
+
+    # Step 2: Combine m12 and m3
+    k_final = (m12_sif * m3_non) + (m12_non * m3_sif)
+    norm_final = max(0.001, 1.0 - k_final)
+
+    m_final_sif = ((m12_sif * m3_sif) + (m12_sif * m3_theta) + (m12_theta * m3_sif)) / norm_final
+    m_final_non = ((m12_non * m3_non) + (m12_non * m3_theta) + (m12_theta * m3_non)) / norm_final
+    m_final_theta = (m12_theta * m3_theta) / norm_final
+
+    bel_sif = round(float(m_final_sif), 4)
+    pl_sif = round(float(m_final_sif + m_final_theta), 4)
+    epistemic_uncertainty = round(float(m_final_theta), 4)
+
+    return {
+        "belief_sif": bel_sif,
+        "plausibility_sif": pl_sif,
+        "uncertainty_interval": f"[{bel_sif}, {pl_sif}]",
+        "epistemic_uncertainty_mass": epistemic_uncertainty,
+        "orthogonal_conflict_factor_k": round(float(k_final), 4),
+        "evidence_synthesis": "Dempster-Shafer Orthogonal Fusion (Rule [+] ML [+] MAUT)"
+    }
+
+
 def compute_maut_risk_score(
     hazard: Optional[str],
     energy_source: Optional[str],
@@ -386,6 +446,11 @@ def assess_sif_precursor(
     else:
         potential_consequence = "Localized operational hazard without immediate life-threatening potential."
 
+    # 6. Dempster-Shafer Evidential Fusion (DST Orthogonal Combination)
+    p_rule_val = 0.90 if rule_assessment == "YES" else 0.10
+    p_maut_val = round(risk_score / 100.0, 4)
+    dst_evidence = compute_dempster_shafer_fusion(p_rule_val, ml_probability, p_maut_val)
+
     return {
         "assessment": "YES" if ai_class == "SIF-potential" else "NO",
         "ai_classification": ai_class,
@@ -397,5 +462,6 @@ def assess_sif_precursor(
         "potential_consequence": potential_consequence,
         "reason": rule_reason,
         "contributing_features": contributing_features,
+        "dempster_shafer_evidence": dst_evidence,
         "ml_model": ml_model or "sif_tfidf_logistic_regression"
     }

@@ -1,4 +1,5 @@
 import re
+import math
 from typing import List, Dict, Any, Optional, Set, Tuple
 from datetime import datetime, date, timedelta
 from collections import defaultdict
@@ -85,6 +86,143 @@ ROLE_PATTERNS = {
         re.IGNORECASE
     )
 }
+
+# ============================================================================
+# 1B. AHO-CORASICK AUTOMATON FOR O(N) MULTI-PATTERN MATCHING
+# ============================================================================
+
+class AhoCorasickNode:
+    """Trie Node for Aho-Corasick Deterministic Finite Automaton."""
+    def __init__(self):
+        self.children: Dict[str, 'AhoCorasickNode'] = {}
+        self.fail: Optional['AhoCorasickNode'] = None
+        self.outputs: List[str] = []
+
+
+class AhoCorasickAutomaton:
+    """
+    Implements Aho-Corasick Multi-String Pattern Matching Algorithm.
+    Scans entire incident report narrative in O(N + matches) single pass
+    simultaneously across all hazard taxonomy vocabulary.
+    """
+    def __init__(self, keywords_map: Dict[str, List[str]]):
+        self.root = AhoCorasickNode()
+        self._build_trie(keywords_map)
+        self._build_failure_links()
+
+    def _build_trie(self, keywords_map: Dict[str, List[str]]):
+        for role, words in keywords_map.items():
+            for word in words:
+                node = self.root
+                for char in word.lower():
+                    if char not in node.children:
+                        node.children[char] = AhoCorasickNode()
+                    node = node.children[char]
+                node.outputs.append(role)
+
+    def _build_failure_links(self):
+        from collections import deque
+        queue = deque()
+        for char, child in self.root.children.items():
+            child.fail = self.root
+            queue.append(child)
+
+        while queue:
+            current = queue.popleft()
+            for char, child in current.children.items():
+                fail_state = current.fail
+                while fail_state and char not in fail_state.children:
+                    fail_state = fail_state.fail
+                child.fail = fail_state.children[char] if fail_state else self.root
+                child.outputs.extend(child.fail.outputs)
+                queue.append(child)
+
+    def search(self, text: str) -> Set[str]:
+        """Scans input text in single linear O(N) pass and returns all matched hazard roles."""
+        matched_roles = set()
+        node = self.root
+        for char in text.lower():
+            while node and char not in node.children:
+                node = node.fail
+            node = node.children[char] if node else self.root
+            if node and node.outputs:
+                matched_roles.update(node.outputs)
+        return matched_roles
+
+
+# Build singleton Aho-Corasick taxonomy matcher
+_AHO_VOCABULARY = {
+    "GAS_LEAK": ["gas leak", "gas smell", "odor of gas", "hydrocarbon vapor", "flammable gas", "lel alarm", "methane", "propane", "lpg", "gas cloud"],
+    "IGNITION_SOURCE": ["ignition source", "spark", "welding", "cutting torch", "grinding", "hot work", "open flame", "torch", "arc flash", "combustion"],
+    "POOR_VENTILATION": ["poor ventilation", "confined space", "unventilated", "enclosed area", "no air flow", "stagnant air", "trench", "pit", "basement"],
+    "OIL_FUEL_LEAK": ["oil leak", "fuel leak", "diesel spill", "hydraulic leak", "oil puddle", "flammable liquid", "solvent spill"],
+    "HOT_SURFACE": ["hot surface", "exhaust manifold", "steam pipe", "boiler", "operating heater", "turbocharger", "radiator", "uninsulated pipe"],
+    "ELECTRICAL_FAULT": ["electrical fault", "short circuit", "sparking wire", "loose connection", "overheated cable", "damaged insulation", "breaker tripping"],
+    "FLAMMABLE_MATERIAL": ["flammable material", "combustible", "solvent drum", "paint can", "wooden pallet", "cardboard", "oily rag", "thinner"],
+    "CHEMICAL_LEAK": ["chemical leak", "chemical spill", "acid leak", "toxic vapor", "chlorine", "ammonia", "h2s", "hydrogen sulfide", "corrosive"],
+    "HUMAN_EXPOSURE": ["workers present", "personnel exposed", "technician in proximity", "without ppe", "no respirator", "line of fire"],
+    "PRESSURE_INCREASE": ["pressure increase", "overpressure", "pressure spike", "abnormal pressure", "relief valve lift", "bar pressure"],
+    "EQUIPMENT_WEAKNESS": ["equipment weakness", "worn gasket", "thinned pipe", "fatigued bolt", "cracked flange", "degraded seal", "seal weeping", "pulsation"],
+    "CORROSION": ["corrosion", "corroded", "severe rust", "metal loss", "pitting", "wall thinning", "oxidation"],
+    "HIGH_PRESSURE": ["high pressure", "pressurized line", "pressurized pipe", "pressurized vessel", "high psi"],
+    "FIRE_OR_SMOKE": ["fire", "smoke", "flames", "flash fire", "conflagration", "burning"],
+    "DAMAGED_GUARD": ["damaged guard", "missing guard", "guard removed", "interlock bypassed", "unguarded machine"],
+    "MOVING_MACHINERY": ["moving machinery", "rotating equipment", "conveyor belt", "pump shaft", "compressor rotor"]
+}
+_GLOBAL_AHO_MATCHER = AhoCorasickAutomaton(_AHO_VOCABULARY)
+
+
+# ============================================================================
+# 1C. HAWKES SELF-EXCITING TEMPORAL POINT PROCESS ENGINE
+# ============================================================================
+
+def compute_hawkes_contagion_intensity(
+    timestamps_hours: List[float],
+    mu_baseline: float = 0.05,
+    alpha_excitation: float = 0.75,
+    beta_decay: float = math.log(2.0) / 24.0
+) -> Dict[str, Any]:
+    """
+    Computes Hawkes Self-Exciting Temporal Point Process conditional intensity:
+    lambda(t) = mu + sum_{t_i < t} ( alpha * exp(-beta * (t - t_i)) )
+    Models dynamic risk contagion and cascading disaster acceleration.
+    """
+    if not timestamps_hours:
+        return {
+            "hawkes_intensity": mu_baseline,
+            "surge_factor": 1.0,
+            "cascading_risk_level": "NORMAL",
+            "model_explanation": "Baseline plant arrival intensity."
+        }
+
+    sorted_t = sorted(timestamps_hours)
+    current_t = sorted_t[-1]
+    
+    # Calculate conditional self-excitation intensity lambda(t)
+    excitation_sum = 0.0
+    for ti in sorted_t[:-1]:
+        dt = current_t - ti
+        if dt >= 0:
+            excitation_sum += alpha_excitation * math.exp(-beta_decay * dt)
+
+    instantaneous_intensity = round(mu_baseline + excitation_sum, 4)
+    surge_factor = round(instantaneous_intensity / max(0.01, mu_baseline), 2)
+
+    risk_label = (
+        "CASCADING DISASTER CONTAGION (CRITICAL)" if surge_factor >= 3.5
+        else "ELEVATED CUMULATIVE SURGE (HIGH)" if surge_factor >= 2.0
+        else "MODERATE RECURRENCE ACCELERATION" if surge_factor >= 1.3
+        else "NORMAL (ISOLATED STOCHASTIC EVENTS)"
+    )
+
+    return {
+        "hawkes_intensity": instantaneous_intensity,
+        "surge_factor": surge_factor,
+        "cascading_risk_level": risk_label,
+        "model_formula": "lambda(t) = mu_0 + sum(alpha * exp(-beta * dt))",
+        "contagion_multiplier": f"{surge_factor}x above baseline"
+    }
+
 
 # ============================================================================
 # 2. HAZARD INTERACTION RULES KNOWLEDGE BASE
@@ -322,17 +460,21 @@ def extract_report_features(report: Dict[str, Any]) -> Dict[str, Any]:
     add_ctx = report.get("additional_context") or ""
     full_text = f"{desc} {add_ctx}".strip()
     
-    # Identify hazard roles
-    detected_roles: Set[str] = set()
+    # 1. Aho-Corasick O(N) Multi-Pattern Trie Extraction (Single linear pass)
+    detected_roles: Set[str] = set(_GLOBAL_AHO_MATCHER.search(full_text))
+    
+    # 2. Supplementary Regex Fallback for complex syntax
     for role_name, pattern in ROLE_PATTERNS.items():
-        if pattern.search(full_text):
+        if role_name not in detected_roles and pattern.search(full_text):
             detected_roles.add(role_name)
     
     # If explicit identified_hazard exists in report, cross-match
     hazard_str = (report.get("identified_hazard") or "").lower()
-    for role_name, pattern in ROLE_PATTERNS.items():
-        if pattern.search(hazard_str):
-            detected_roles.add(role_name)
+    if hazard_str:
+        detected_roles.update(_GLOBAL_AHO_MATCHER.search(hazard_str))
+        for role_name, pattern in ROLE_PATTERNS.items():
+            if role_name not in detected_roles and pattern.search(hazard_str):
+                detected_roles.add(role_name)
 
     loc_raw = report.get("location") or report.get("site") or "Unit 1"
     norm_loc = normalize_location(loc_raw)
@@ -548,6 +690,17 @@ def evaluate_report_pair_or_group(reports: List[Dict[str, Any]]) -> Dict[str, An
     ]
     bowtie_data = synthesize_bowtie_model(rel_name, pot_consequence, contributing_signals)
 
+    # Compute Hawkes Self-Exciting Temporal Point Process Contagion Intensity
+    timestamps_h = []
+    base_ref_date = datetime(2020, 1, 1)
+    for f in features:
+        try:
+            d = datetime.strptime(str(f["date"])[:10], "%Y-%m-%d")
+            timestamps_h.append((d - base_ref_date).total_seconds() / 3600.0)
+        except Exception:
+            pass
+    hawkes_info = compute_hawkes_contagion_intensity(timestamps_h)
+
     return {
         "cluster_detected": True,
         "signals": contributing_signals,
@@ -558,6 +711,7 @@ def evaluate_report_pair_or_group(reports: List[Dict[str, Any]]) -> Dict[str, An
         "reason": reason_text,
         "recommended_action": best_rule["recommended_action"],
         "bow_tie_model": bowtie_data,
+        "hawkes_contagion_model": hawkes_info,
         "regulatory_governance": {
             "osha_standard": "OSHA 29 CFR 1910.119 (Process Safety Management)",
             "ccps_guideline": "CCPS Guidelines for Process Safety in Operations",
@@ -721,6 +875,7 @@ def correlate_reports_into_weak_signals(reports: List[Dict[str, Any]]) -> List[D
                 "barrier_status": "DEFENSIVE CONTROLS COMPROMISED",
                 "signals": group_eval["signals"],
                 "bow_tie_model": group_eval.get("bow_tie_model"),
+                "hawkes_contagion_model": group_eval.get("hawkes_contagion_model"),
                 "regulatory_governance": group_eval.get("regulatory_governance")
             })
             sig_counter += 1
@@ -790,6 +945,7 @@ def correlate_reports_into_weak_signals(reports: List[Dict[str, Any]]) -> List[D
                         "barrier_status": "CRITICAL BARRIERS INTERLINKED",
                         "signals": pair_eval["signals"],
                         "bow_tie_model": pair_eval.get("bow_tie_model"),
+                        "hawkes_contagion_model": pair_eval.get("hawkes_contagion_model"),
                         "regulatory_governance": pair_eval.get("regulatory_governance")
                     })
                     sig_counter += 1

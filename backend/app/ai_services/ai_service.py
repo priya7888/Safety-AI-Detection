@@ -127,6 +127,7 @@ def analyze_safety_report(
         "ai_sif_score": sif_result.get("ai_sif_score", 25),
         "ai_confidence": sif_result.get("ai_confidence", 85.0),
         "contributing_features": sif_result.get("contributing_features", []),
+        "dempster_shafer_evidence": sif_result.get("dempster_shafer_evidence"),
         "life_saving_rule": lsr_match,
         "extracted_entities": extracted_info,
         "explanation": explanation,
