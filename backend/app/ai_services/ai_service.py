@@ -7,7 +7,7 @@ from .safety_signal_detection import detect_safety_signals
 from .energy_exposure_analysis import analyze_energy_and_exposure
 from .barrier_analysis import analyze_barriers
 from .sif_assessment import assess_sif_precursor
-from .explanation_generator import generate_explanation
+from .explanation_generator import generate_explanation, generate_osha_hierarchy_of_controls
 from .life_saving_rules import map_life_saving_rules
 
 def analyze_safety_report(
@@ -83,7 +83,7 @@ def analyze_safety_report(
     extracted_info["consequence"] = sif_result.get("potential_consequence") or "UNKNOWN"
 
 
-    # 10. Explainable Result Generation
+    # 10. Explainable Result Generation & OSHA Hierarchy of Controls
     explanation = generate_explanation(
         sif_assessment=sif_result["assessment"],
         hazard=identified_hazard,
@@ -94,6 +94,13 @@ def analyze_safety_report(
         potential_consequence=sif_result.get("potential_consequence"),
         report_type=report_type,
         safety_factors=safety_factors
+    )
+
+    osha_controls = generate_osha_hierarchy_of_controls(
+        hazard=identified_hazard,
+        energy_source=energy_exposure.get("energy_source"),
+        barrier_status=barrier_eval.get("status"),
+        sif_assessment=sif_result["assessment"]
     )
 
     # Structured Output
@@ -122,5 +129,7 @@ def analyze_safety_report(
         "contributing_features": sif_result.get("contributing_features", []),
         "life_saving_rule": lsr_match,
         "extracted_entities": extracted_info,
-        "explanation": explanation
+        "explanation": explanation,
+        "osha_hierarchy_of_controls": osha_controls
     }
+

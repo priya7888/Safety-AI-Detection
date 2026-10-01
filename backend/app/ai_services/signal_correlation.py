@@ -385,20 +385,27 @@ def calculate_proximity(feat1: Dict[str, Any], feat2: Dict[str, Any]) -> Tuple[b
     if not loc_match:
         return False, 0.0
 
-    # 3. Temporal Proximity (within 30 days)
+    # 3. Temporal Proximity with Exponential Decay Weighting (Half-life = 48 hours)
+    import math
     try:
-        d1 = datetime.strptime(str(feat1["date"])[:10], "%Y-%m-%d").date()
-        d2 = datetime.strptime(str(feat2["date"])[:10], "%Y-%m-%d").date()
-        days_apart = abs((d1 - d2).days)
-        if days_apart > 30:
-            # Still valid if same equipment, but lower weight
+        d1 = datetime.strptime(str(feat1["date"])[:10], "%Y-%m-%d")
+        d2 = datetime.strptime(str(feat2["date"])[:10], "%Y-%m-%d")
+        delta_hours = abs((d1 - d2).total_seconds()) / 3600.0
+        
+        # Max window is 720 hours (30 days)
+        if delta_hours > 720.0:
             if feat1["equipment_tag"] and feat1["equipment_tag"] == feat2["equipment_tag"]:
-                return True, 0.7
+                return True, 0.65
             return False, 0.0
-        time_weight = max(0.6, 1.0 - (days_apart / 60.0))
+
+        # Half-life exponential decay: w(t) = exp(- ln(2) * dt / 48h)
+        decay_lambda = math.log(2.0) / 48.0
+        decay_weight = round(float(math.exp(-decay_lambda * delta_hours)), 4)
+        time_weight = max(0.40, decay_weight)
         return True, time_weight
     except Exception:
         return True, 0.85
+
 
 # ============================================================================
 # 5. CORE CORRELATION ENGINE IMPLEMENTATION
@@ -539,6 +546,7 @@ def evaluate_report_pair_or_group(reports: List[Dict[str, Any]]) -> Dict[str, An
         }
         for f in features
     ]
+    bowtie_data = synthesize_bowtie_model(rel_name, pot_consequence, contributing_signals)
 
     return {
         "cluster_detected": True,
@@ -548,8 +556,35 @@ def evaluate_report_pair_or_group(reports: List[Dict[str, Any]]) -> Dict[str, An
         "combined_risk": comb_risk,
         "correlation_score": final_score,
         "reason": reason_text,
-        "recommended_action": best_rule["recommended_action"]
+        "recommended_action": best_rule["recommended_action"],
+        "bow_tie_model": bowtie_data,
+        "regulatory_governance": {
+            "osha_standard": "OSHA 29 CFR 1910.119 (Process Safety Management)",
+            "ccps_guideline": "CCPS Guidelines for Process Safety in Operations",
+            "iogp_framework": "IOGP Report 456 — Process Safety Leading and Lagging Metrics"
+        }
     }
+
+
+def synthesize_bowtie_model(relationship: str, consequence: str, signals: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Synthesizes dynamic Bow-Tie barrier model for the compound catastrophe alert."""
+    rel_low = relationship.lower()
+    return {
+        "threats": [s.get("description", "Identified hazard event")[:80] for s in signals],
+        "preventative_barriers": [
+            "Continuous Lower Explosive Limit (LEL) / Multi-Gas Monitoring",
+            "Permit-to-Work (PTW) & Hot Work Co-location Verification",
+            "Physical Mechanical Isolation / Double Block & Bleed"
+        ],
+        "top_event": f"Loss of Containment & Uncontrolled Energy Release ({relationship})",
+        "mitigative_barriers": [
+            "Emergency Shutdown (ESD) Automatic Loop Trigger",
+            "Fixed Deluge / Blast Wall Passive Protection",
+            "Immediate Unit Evacuation & Exclusion Zone Muster"
+        ],
+        "consequences": [consequence, "Severe Asset Loss and Personnel SIF Escalation"]
+    }
+
 
 # ============================================================================
 # 6. MULTI-REPORT DATASET CORRELATION FOR PLATFORM DASHBOARDS
@@ -684,7 +719,9 @@ def correlate_reports_into_weak_signals(reports: List[Dict[str, Any]]) -> List[D
                 "key_learnings": f"Enforce immediate controls for {group_eval['relationship']}.",
                 "energy_source": "Co-Occurring Energetic Vectors",
                 "barrier_status": "DEFENSIVE CONTROLS COMPROMISED",
-                "signals": group_eval["signals"]
+                "signals": group_eval["signals"],
+                "bow_tie_model": group_eval.get("bow_tie_model"),
+                "regulatory_governance": group_eval.get("regulatory_governance")
             })
             sig_counter += 1
 
@@ -751,7 +788,9 @@ def correlate_reports_into_weak_signals(reports: List[Dict[str, Any]]) -> List[D
                         "key_learnings": f"Immediate mitigation required for {pair_eval['relationship']}.",
                         "energy_source": "Compound Energy Vector",
                         "barrier_status": "CRITICAL BARRIERS INTERLINKED",
-                        "signals": pair_eval["signals"]
+                        "signals": pair_eval["signals"],
+                        "bow_tie_model": pair_eval.get("bow_tie_model"),
+                        "regulatory_governance": pair_eval.get("regulatory_governance")
                     })
                     sig_counter += 1
 
