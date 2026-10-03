@@ -1,8 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .database import engine, Base
-from .config import settings
-from .routers import auth, reports, analysis, sif_intelligence, feedback, dashboard, weak_signals, sif_precursors
+from .routers import auth, reports, analysis, sif_intelligence, feedback, dashboard, weak_signals, sif_precursors, emergency
 from .seed_data import seed_sample_data
 
 # Create DB Tables
@@ -11,7 +10,7 @@ Base.metadata.create_all(bind=engine)
 # Create FastAPI app
 app = FastAPI(
     title=settings.PROJECT_NAME,
-    description="AI-Powered SIF Precursor Detection & Safety Intelligence for Smart India Hackathon PS 165",
+    description="AI-Powered SIF Precursor Detection & Hyperlocal Emergency Response Platform",
     version="2.0.0"
 )
 
@@ -34,6 +33,7 @@ app.include_router(feedback.router)
 app.include_router(dashboard.router)
 app.include_router(weak_signals.router)
 app.include_router(sif_precursors.router)
+app.include_router(emergency.router)
 
 @app.on_event("startup")
 def startup_event():

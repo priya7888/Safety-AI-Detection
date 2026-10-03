@@ -5,6 +5,12 @@ from .ai_analysis import AIAnalysis, SIFPrecursorEnum
 from .feedback import Feedback, FeedbackStatusEnum
 from .sif_finding import SIFFinding
 from .weak_signal import WeakSignal, WeakSignalReview, report_weak_signals
+from .emergency_incident import (
+    EmergencyIncident,
+    EmergencyResponderService,
+    IncidentAssignment,
+    IncidentAuditEvent,
+)
 
 __all__ = [
     "Organization",
@@ -20,5 +26,9 @@ __all__ = [
     "WeakSignal",
     "WeakSignalReview",
     "report_weak_signals",
+    "EmergencyIncident",
+    "EmergencyResponderService",
+    "IncidentAssignment",
+    "IncidentAuditEvent",
 ]
 

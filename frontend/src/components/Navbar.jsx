@@ -93,8 +93,18 @@ export default function Navbar({ onOpenLogin, onOpenDemo }) {
             ))}
           </nav>
 
-          {/* Right Side: Organization Login Button (Always Original) */}
+          {/* Right Side: Emergency Platform & Organization Login Button */}
           <div className="hidden md:flex items-center gap-3">
+            <button
+              onClick={() => {
+                window.history.pushState({}, '', '/emergency');
+                window.dispatchEvent(new PopStateEvent('popstate'));
+              }}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-red-600/20 hover:bg-red-600/30 border border-red-500/50 text-red-300 hover:text-white text-xs font-bold shadow-lg shadow-red-600/20 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer"
+            >
+              <div className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+              <span>Hyperlocal Emergency SOS</span>
+            </button>
             <button
               onClick={onOpenLogin}
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-600 hover:from-amber-600 hover:to-yellow-700 text-slate-950 text-sm font-bold shadow-lg shadow-amber-500/25 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer"
@@ -131,7 +141,18 @@ export default function Navbar({ onOpenLogin, onOpenDemo }) {
             </button>
           ))}
           
-          <div className="pt-3 border-t border-slate-800">
+          <div className="pt-3 border-t border-slate-800 space-y-2">
+            <button
+              onClick={() => {
+                setMobileMenuOpen(false);
+                window.history.pushState({}, '', '/emergency');
+                window.dispatchEvent(new PopStateEvent('popstate'));
+              }}
+              className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-red-600/20 border border-red-500/50 text-red-300 font-bold shadow-md cursor-pointer"
+            >
+              <div className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+              <span>Hyperlocal Emergency SOS</span>
+            </button>
             <button
               onClick={() => {
                 setMobileMenuOpen(false);

@@ -12,6 +12,8 @@ import LoginModal from './components/LoginModal';
 import InteractiveAiDemoModal from './components/InteractiveAiDemoModal';
 import OrganizationPlatform from './components/platform/OrganizationPlatform';
 
+import HyperlocalEmergencyPlatform from './pages/HyperlocalEmergencyPlatform';
+
 const PROTECTED_ROUTES = [
   '/dashboard',
   '/ai-analysis',
@@ -213,6 +215,27 @@ function AppContent() {
             navigateTo(currentPath || '/dashboard');
           }}
         />
+      </div>
+    );
+  }
+
+  // IF ON HYPERLOCAL EMERGENCY ROUTE: RENDER EMERGENCY PLATFORM
+  if (currentPath === '/emergency') {
+    return (
+      <div>
+        <div className="bg-slate-950 px-6 py-2 border-b border-slate-800 flex justify-between items-center text-xs">
+          <button
+            onClick={() => {
+              window.history.pushState({}, '', '/');
+              setCurrentPath('/');
+            }}
+            className="text-slate-400 hover:text-white flex items-center gap-1.5 font-medium cursor-pointer"
+          >
+            &larr; Back to SafetyAI Portal
+          </button>
+          <span className="text-slate-500 font-mono">Hyperlocal Emergency Operating System (PS-61)</span>
+        </div>
+        <HyperlocalEmergencyPlatform />
       </div>
     );
   }
