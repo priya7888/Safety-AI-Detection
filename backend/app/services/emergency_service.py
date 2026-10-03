@@ -22,14 +22,9 @@ from ..models.emergency_incident import (
     IncidentAssignment,
     IncidentAuditEvent,
 )
-from ..ai_services.sif_ml_inference import SIFModelInference
-from ..ai_services.signal_correlation import SignalCorrelationEngine
-from ..ai_services.sif_assessment import SIFAssessmentEngine
-
-# Initialize lightweight local engines
-_inference_engine = SIFModelInference()
-_correlation_engine = SignalCorrelationEngine()
-_assessment_engine = SIFAssessmentEngine()
+from ..ai_services.sif_ml_inference import predict_sif_potential
+from ..ai_services.signal_correlation import detect_latent_weak_signals_in_text
+from ..ai_services.sif_assessment import compute_dempster_shafer_fusion
 
 
 def haversine_distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -178,20 +173,24 @@ def create_emergency_incident(
     incident_number = f"INC-2026-{seq:03d}"
 
     # 2. Run AI Severity & Hazard Analysis
-    # Aho-Corasick hazard extraction
-    hazard_analysis = _correlation_engine.extract_and_correlate(description)
-    extracted_hazards = hazard_analysis.get("extracted_hazards", [])
-
-    # Dempster-Shafer Evidential Triage
-    dst_result = _assessment_engine.evaluate_sif(description)
-    bel_sif = dst_result.get("belief_sif", 0.75)
-    pl_sif = dst_result.get("plausibility_sif", 0.90)
-    uncertainty_str = f"[{bel_sif:.2f}, {pl_sif:.2f}]"
+    # Multi-pattern hazard extraction
+    extracted_hazards_list = detect_latent_weak_signals_in_text(description)
+    extracted_hazards = [h.get("category") for h in extracted_hazards_list]
 
     # ML Inference for classification
-    ml_result = _inference_engine.predict_sif(description)
-    is_sif_ml = ml_result.get("is_sif_precursor", False)
-    ml_prob = ml_result.get("confidence", 0.80)
+    ml_result = predict_sif_potential(description)
+    is_sif_ml = ml_result.get("predicted_class") == "SIF-potential"
+    ml_prob = ml_result.get("confidence") or 0.80
+
+    # Dempster-Shafer Evidential Triage
+    dst_result = compute_dempster_shafer_fusion(
+        p_rule=0.85 if len(extracted_hazards) > 0 else 0.40,
+        p_ml=ml_prob if is_sif_ml else 0.30,
+        p_maut=0.90 if ("trauma" in description.lower() or "explosion" in description.lower() or "fire" in description.lower()) else 0.50
+    )
+    bel_sif = dst_result.get("belief_sif", 0.82)
+    pl_sif = dst_result.get("plausibility_sif", 0.94)
+    uncertainty_str = dst_result.get("uncertainty_interval", f"[{bel_sif:.2f}, {pl_sif:.2f}]")
 
     # Determine Severity
     if is_sif_ml or bel_sif > 0.60 or "trauma" in description.lower() or "explosion" in description.lower() or "critical" in description.lower() or "severe" in description.lower():

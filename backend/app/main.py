@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .database import engine, Base
+from .config import settings
 from .routers import auth, reports, analysis, sif_intelligence, feedback, dashboard, weak_signals, sif_precursors, emergency
 from .seed_data import seed_sample_data
 
